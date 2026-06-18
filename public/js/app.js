@@ -32,7 +32,6 @@ const dom = {
   playerIframe: $('#player-iframe'),
 };
 
-let searchTimer = null;
 let lastQuery = '';
 let seriesData = null;
 
@@ -304,22 +303,16 @@ function closeTv() {
 
 dom.searchForm.addEventListener('submit', (e) => {
   e.preventDefault();
-  clearTimeout(searchTimer);
   doSearch(dom.searchInput.value);
 });
 
 dom.searchInput.addEventListener('input', () => {
   const q = dom.searchInput.value;
   dom.searchClear.classList.toggle('hidden', !q);
-
-  clearTimeout(searchTimer);
   if (!q.trim()) {
     lastQuery = '';
     loadTrending();
-    return;
   }
-
-  searchTimer = setTimeout(() => doSearch(q), 300);
 });
 
 dom.searchClear.addEventListener('click', () => {
