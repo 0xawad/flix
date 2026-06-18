@@ -1,4 +1,4 @@
-const IMG_BASE = 'https://image.tmdb.org/t/p/w342';
+const IMG_BASE = 'https://image.tmdb.org/t/p/w500';
 const VIDCORE_BASE = 'https://vidcore.net/movie';
 
 const $ = (s) => document.querySelector(s);
@@ -119,12 +119,18 @@ function renderResults(data) {
       ? `<img src="${imgUrl}" alt="${escape(title)}" loading="lazy">`
       : `<div class="no-poster">No poster</div>`;
 
+    const playIcon = '<svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3" fill="currentColor"/></svg>';
+
     card.innerHTML = `
-      <div class="card-poster">${posterHtml}</div>
-      <div class="card-body">
-        <div class="card-title">${escape(title)}</div>
-        <div class="card-year">${year}</div>
-        <span class="card-badge ${isMovie ? 'card-badge--movie' : 'card-badge--tv'}">${isMovie ? 'Movie' : 'TV'}</span>
+      <div class="card-poster">
+        ${imgUrl ? `<img src="${imgUrl}" alt="${escape(title)}" loading="lazy">` : `<div class="no-poster">No poster</div>`}
+        <div class="card-overlay">
+          <div class="card-play">${playIcon}</div>
+          <div class="card-info">
+            <div class="card-title">${escape(title)}</div>
+            <div class="card-meta">${year}${year ? ' · ' : ''}<span class="card-tag ${isMovie ? 'card-tag--movie' : 'card-tag--tv'}">${isMovie ? 'Movie' : 'TV'}</span></div>
+          </div>
+        </div>
       </div>
     `;
 
