@@ -37,6 +37,7 @@ let seriesData = null;
 
 function showView(view) {
   $$('.view').forEach((v) => v.classList.remove('active'));
+  view.classList.remove('hidden');
   view.classList.add('active');
 }
 
