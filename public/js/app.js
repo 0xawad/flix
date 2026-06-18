@@ -8,7 +8,6 @@ const dom = {
   searchForm: $('#search-form'),
   searchInput: $('#search-input'),
   searchClear: $('#search-clear'),
-  heroView: $('#hero-view'),
   resultsView: $('#results-view'),
   resultsGrid: $('#results-grid'),
   resultsLabel: $('#results-label'),
@@ -88,6 +87,25 @@ async function doSearch(query) {
     dom.resultsLoading.classList.add('hidden');
     dom.resultsError.classList.remove('hidden');
     dom.resultsErrorMsg.textContent = err.message;
+  }
+}
+
+async function loadTrending() {
+  dom.resultsLabel.textContent = 'Trending';
+  dom.resultsCount.textContent = '';
+  dom.resultsLoading.classList.remove('hidden');
+  dom.resultsGrid.innerHTML = '';
+  dom.resultsEmpty.classList.add('hidden');
+  dom.resultsError.classList.add('hidden');
+  showView(dom.resultsView);
+
+  try {
+    const data = await fetchJSON('/api/trending');
+    dom.resultsLoading.classList.add('hidden');
+    renderResults(data);
+  } catch (err) {
+    dom.resultsLoading.classList.add('hidden');
+    renderResults({ results: [] });
   }
 }
 
@@ -286,10 +304,7 @@ dom.searchInput.addEventListener('input', () => {
   clearTimeout(searchTimer);
   if (!q.trim()) {
     lastQuery = '';
-    dom.resultsGrid.innerHTML = '';
-    dom.resultsLabel.textContent = 'Results';
-    dom.resultsCount.textContent = '';
-    showView(dom.heroView);
+    loadTrending();
     return;
   }
 
@@ -301,10 +316,7 @@ dom.searchClear.addEventListener('click', () => {
   dom.searchInput.focus();
   dom.searchClear.classList.add('hidden');
   lastQuery = '';
-  dom.resultsGrid.innerHTML = '';
-  dom.resultsLabel.textContent = 'Results';
-  dom.resultsCount.textContent = '';
-  showView(dom.heroView);
+  loadTrending();
 });
 
 dom.resultsRetry.addEventListener('click', () => {
@@ -326,4 +338,4 @@ document.addEventListener('keydown', (e) => {
   }
 });
 
-showView(dom.heroView);
+loadTrending();
