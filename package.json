@@ -1,0 +1,6 @@
+{
+  "name": "flix",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Searchable streaming web app for movies and TV series"
+}
