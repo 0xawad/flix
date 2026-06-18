@@ -1,361 +1,323 @@
 const IMG_BASE = 'https://image.tmdb.org/t/p/w342';
 const VIDCORE_BASE = 'https://vidcore.net/movie';
 
-const $ = (sel) => document.querySelector(sel);
-const $$ = (sel) => document.querySelectorAll(sel);
+const $ = (s) => document.querySelector(s);
+const $$ = (s) => document.querySelectorAll(s);
 
-const searchForm = $('#search-form');
-const searchInput = $('#search-input');
-const searchClear = $('#search-clear');
-const resultsGrid = $('#results-grid');
-const emptyState = $('#empty-state');
-const loadingState = $('#loading-state');
-const errorState = $('#error-state');
-const errorMessage = $('#error-message');
-const retryBtn = $('#retry-btn');
-const resultsSection = $('#results-section');
-const tvSection = $('#tv-section');
-const tvBack = $('#tv-back');
-const tvPoster = $('#tv-poster');
-const tvTitle = $('#tv-title');
-const tvOverview = $('#tv-overview');
-const seasonSelect = $('#season-select');
-const episodesGrid = $('#episodes-grid');
-const tvLoading = $('#tv-loading');
-const playerSection = $('#player-section');
-const playerBack = $('#player-back');
-const playerTitle = $('#player-title');
-const playerIframe = $('#player-iframe');
+const dom = {
+  searchForm: $('#search-form'),
+  searchInput: $('#search-input'),
+  searchClear: $('#search-clear'),
+  heroView: $('#hero-view'),
+  resultsView: $('#results-view'),
+  resultsGrid: $('#results-grid'),
+  resultsLabel: $('#results-label'),
+  resultsCount: $('#results-count'),
+  resultsEmpty: $('#results-empty'),
+  resultsLoading: $('#results-loading'),
+  resultsError: $('#results-error'),
+  resultsErrorMsg: $('#results-error-msg'),
+  resultsRetry: $('#results-retry'),
+  tvView: $('#tv-view'),
+  tvBack: $('#tv-back'),
+  tvPoster: $('#tv-poster'),
+  tvTitle: $('#tv-title'),
+  tvOverview: $('#tv-overview'),
+  seasonSelect: $('#season-select'),
+  episodesList: $('#episodes-list'),
+  tvLoading: $('#tv-loading'),
+  playerView: $('#player-view'),
+  playerBack: $('#player-back'),
+  playerMeta: $('#player-meta'),
+  playerIframe: $('#player-iframe'),
+};
 
 let searchTimer = null;
 let lastQuery = '';
-let currentSeriesData = null;
-let currentEpisodeData = null;
+let seriesData = null;
 
-function showSection(section) {
-  [resultsSection, tvSection, playerSection].forEach((s) => {
-    s.classList.remove('visible');
-    s.classList.add('hidden');
-  });
-  section.classList.remove('hidden');
-  requestAnimationFrame(() => section.classList.add('visible'));
-}
-
-function showStates(states) {
-  [emptyState, loadingState, errorState].forEach((s) => s.classList.add('hidden'));
-  states.forEach((s) => s.classList.remove('hidden'));
+function showView(view) {
+  $$('.view').forEach((v) => v.classList.remove('active'));
+  view.classList.add('active');
 }
 
 function posterUrl(path) {
   return path ? `${IMG_BASE}${path}` : null;
 }
 
-function renderPoster(container, path, alt) {
+function renderPoster(el, path, alt) {
   const url = posterUrl(path);
-  if (url) {
-    container.innerHTML = `<img src="${url}" alt="${alt}" loading="lazy">`;
-  } else {
-    container.innerHTML = `<div class="no-poster">No poster</div>`;
+  el.innerHTML = url
+    ? `<img src="${url}" alt="${alt}" loading="lazy">`
+    : `<div class="no-poster">No poster</div>`;
+}
+
+function escape(str) {
+  const d = document.createElement('div');
+  d.textContent = str;
+  return d.innerHTML;
+}
+
+async function fetchJSON(url) {
+  const res = await fetch(url);
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || data.status_message || `Request failed (${res.status})`);
+  return data;
+}
+
+async function doSearch(query) {
+  query = query.trim();
+  if (!query || query === lastQuery) return;
+  lastQuery = query;
+  seriesData = null;
+  dom.searchClear.classList.remove('hidden');
+
+  dom.resultsLoading.classList.remove('hidden');
+  dom.resultsGrid.innerHTML = '';
+  dom.resultsEmpty.classList.add('hidden');
+  dom.resultsError.classList.add('hidden');
+  dom.resultsLabel.textContent = `Results for "${query}"`;
+  dom.resultsCount.textContent = '';
+  showView(dom.resultsView);
+
+  try {
+    const data = await fetchJSON(`/api/search?q=${encodeURIComponent(query)}`);
+    dom.resultsLoading.classList.add('hidden');
+    renderResults(data);
+  } catch (err) {
+    dom.resultsLoading.classList.add('hidden');
+    dom.resultsError.classList.remove('hidden');
+    dom.resultsErrorMsg.textContent = err.message;
   }
-}
-
-function formatDate(dateStr) {
-  if (!dateStr) return '';
-  const d = new Date(dateStr);
-  return isNaN(d.getTime()) ? dateStr : d.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
-}
-
-function mediaTypeLabel(type) {
-  return type === 'movie' ? 'Movie' : 'TV';
-}
-
-function mediaTypeBadge(type) {
-  const cls = type === 'movie' ? 'badge-movie' : 'badge-tv';
-  return `<span class="result-badge ${cls}">${mediaTypeLabel(type)}</span>`;
-}
-
-function buildVidCoreUrl(id) {
-  return `${VIDCORE_BASE}/${id}`;
-}
-
-function playMedia(id, title) {
-  playerTitle.textContent = title;
-  playerIframe.src = buildVidCoreUrl(id);
-  showSection(playerSection);
-}
-
-function goBackFromPlayer() {
-  playerIframe.src = '';
-  if (currentSeriesData) {
-    showSection(tvSection);
-  } else {
-    showSection(resultsSection);
-  }
-}
-
-function goBackFromTv() {
-  currentSeriesData = null;
-  seasonSelect.innerHTML = '';
-  episodesGrid.innerHTML = '';
-  showSection(resultsSection);
-}
-
-async function fetchSearch(query) {
-  const res = await fetch(`/api/search?q=${encodeURIComponent(query)}`);
-  if (!res.ok) throw new Error('Search request failed');
-  return res.json();
-}
-
-async function fetchTvDetails(id) {
-  const res = await fetch(`/api/tv/${id}`);
-  if (!res.ok) throw new Error('Failed to fetch series details');
-  return res.json();
-}
-
-async function fetchSeasonEpisodes(id, num) {
-  const res = await fetch(`/api/tv/${id}/season/${num}`);
-  if (!res.ok) throw new Error('Failed to fetch episodes');
-  return res.json();
 }
 
 function renderResults(data) {
-  resultsGrid.innerHTML = '';
-
-  const results = (data.results || []).filter(
+  const items = (data.results || []).filter(
     (r) => r.media_type === 'movie' || r.media_type === 'tv'
   );
 
-  if (results.length === 0) {
-    showStates([emptyState]);
-    emptyState.querySelector('p').textContent = `No results for "${lastQuery}"`;
+  if (items.length === 0) {
+    dom.resultsEmpty.classList.remove('hidden');
+    dom.resultsCount.textContent = '0';
     return;
   }
 
-  showStates([]);
+  dom.resultsCount.textContent = `${items.length}`;
 
-  results.forEach((item) => {
+  items.forEach((item) => {
     const card = document.createElement('div');
-    card.className = 'result-card';
+    card.className = 'card';
     card.tabIndex = 0;
     card.setAttribute('role', 'button');
 
     const title = item.title || item.name || 'Untitled';
     const year = (item.release_date || item.first_air_date || '').slice(0, 4);
     const imgUrl = posterUrl(item.poster_path);
-    const mediaType = item.media_type;
+    const isMovie = item.media_type === 'movie';
 
     const posterHtml = imgUrl
-      ? `<img src="${imgUrl}" alt="${title}" loading="lazy">`
+      ? `<img src="${imgUrl}" alt="${escape(title)}" loading="lazy">`
       : `<div class="no-poster">No poster</div>`;
 
     card.innerHTML = `
-      <div class="result-poster">${posterHtml}</div>
-      <div class="result-info">
-        <div class="result-title">${escapeHtml(title)}</div>
-        <div class="result-year">${year}</div>
-        ${mediaTypeBadge(mediaType)}
+      <div class="card-poster">${posterHtml}</div>
+      <div class="card-body">
+        <div class="card-title">${escape(title)}</div>
+        <div class="card-year">${year}</div>
+        <span class="card-badge ${isMovie ? 'card-badge--movie' : 'card-badge--tv'}">${isMovie ? 'Movie' : 'TV'}</span>
       </div>
     `;
 
-    card.addEventListener('click', () => handleResultClick(item));
+    card.addEventListener('click', () => handleSelect(item));
     card.addEventListener('keydown', (e) => {
       if (e.key === 'Enter' || e.key === ' ') {
         e.preventDefault();
-        handleResultClick(item);
+        handleSelect(item);
       }
     });
 
-    resultsGrid.appendChild(card);
+    dom.resultsGrid.appendChild(card);
   });
 }
 
-function escapeHtml(str) {
-  const div = document.createElement('div');
-  div.textContent = str;
-  return div.innerHTML;
-}
-
-async function handleResultClick(item) {
+function handleSelect(item) {
   const title = item.title || item.name || 'Untitled';
-
   if (item.media_type === 'movie') {
-    playMedia(item.id, title);
+    openPlayer(item.id, title);
   } else {
-    await openTvDetail(item.id, title);
+    openTv(item.id, title);
   }
 }
 
-async function openTvDetail(id, title) {
-  tvLoading.classList.remove('hidden');
-  episodesGrid.innerHTML = '';
-  seasonSelect.innerHTML = '';
-  showSection(tvSection);
+async function openTv(id, title) {
+  dom.tvLoading.classList.remove('hidden');
+  dom.episodesList.innerHTML = '';
+  dom.seasonSelect.innerHTML = '<option value="">Loading...</option>';
+  showView(dom.tvView);
 
   try {
-    const data = await fetchTvDetails(id);
-    currentSeriesData = data;
+    const data = await fetchJSON(`/api/tv/${id}`);
+    seriesData = data;
 
-    renderPoster(tvPoster, data.poster_path, title);
-    tvTitle.textContent = title;
-    tvOverview.textContent = data.overview || 'No overview available.';
+    renderPoster(dom.tvPoster, data.poster_path, title);
+    dom.tvTitle.textContent = title;
+    dom.tvOverview.textContent = data.overview || '';
 
-    seasonSelect.innerHTML = '<option value="">Select a season</option>';
-    (data.seasons || [])
-      .filter((s) => s.season_number > 0)
-      .forEach((s) => {
-        const opt = document.createElement('option');
-        opt.value = s.season_number;
-        opt.textContent = `${s.name} (${s.episode_count} episodes)`;
-        seasonSelect.appendChild(opt);
-      });
-
-    tvLoading.classList.add('hidden');
-
-    if (seasonSelect.options.length > 1) {
-      seasonSelect.value = seasonSelect.options[1].value;
-      seasonSelect.dispatchEvent(new Event('change'));
-    }
-  } catch (err) {
-    tvLoading.classList.add('hidden');
-    showStates([errorState]);
-    errorMessage.textContent = err.message || 'Failed to load series details';
-  }
-}
-
-async function loadEpisodes(seriesId, seasonNum) {
-  episodesGrid.innerHTML = '';
-  episodesGrid.classList.add('hidden');
-
-  const loading = document.createElement('div');
-  loading.className = 'state-message';
-  loading.innerHTML = '<div class="spinner"></div><p>Loading episodes...</p>';
-  episodesGrid.parentNode.insertBefore(loading, episodesGrid);
-
-  try {
-    const data = await fetchSeasonEpisodes(seriesId, seasonNum);
-    loading.remove();
-    episodesGrid.classList.remove('hidden');
-
-    const episodes = data.episodes || [];
-    if (episodes.length === 0) {
-      episodesGrid.innerHTML = `
-        <div class="state-message">
-          <p>No episodes found for this season.</p>
-        </div>`;
-      return;
-    }
-
-    episodesGrid.innerHTML = '';
-    episodes.forEach((ep) => {
-      const card = document.createElement('div');
-      card.className = 'episode-card';
-      card.tabIndex = 0;
-      card.setAttribute('role', 'button');
-
-      card.innerHTML = `
-        <div class="episode-number">E${ep.episode_number}</div>
-        <div class="episode-name">${escapeHtml(ep.name || `Episode ${ep.episode_number}`)}</div>
-        <div class="episode-air">${formatDate(ep.air_date)}</div>
-      `;
-
-      card.addEventListener('click', () => {
-        playMedia(ep.id, `${currentSeriesData.name} - ${ep.name || `Episode ${ep.episode_number}`}`);
-      });
-      card.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter' || e.key === ' ') {
-          e.preventDefault();
-          card.click();
-        }
-      });
-
-      episodesGrid.appendChild(card);
+    dom.seasonSelect.innerHTML = '';
+    const seasons = (data.seasons || []).filter((s) => s.season_number > 0);
+    seasons.forEach((s) => {
+      const opt = document.createElement('option');
+      opt.value = s.season_number;
+      opt.textContent = `${s.name} (${s.episode_count} eps)`;
+      dom.seasonSelect.appendChild(opt);
     });
+
+    dom.tvLoading.classList.add('hidden');
+
+    if (seasons.length > 0) {
+      dom.seasonSelect.value = seasons[0].season_number;
+      loadEpisodes(id, seasons[0].season_number);
+    }
   } catch (err) {
-    loading.remove();
-    episodesGrid.classList.remove('hidden');
-    episodesGrid.innerHTML = `
-      <div class="state-message">
-        <p>Failed to load episodes. ${escapeHtml(err.message || '')}</p>
+    dom.tvLoading.classList.add('hidden');
+    dom.episodesList.innerHTML = `
+      <div class="state" style="grid-column:1/-1">
+        <p>${escape(err.message)}</p>
       </div>`;
   }
 }
 
-async function doSearch(query) {
-  query = query.trim();
-  if (!query || query === lastQuery) return;
-
-  lastQuery = query;
-  searchClear.classList.toggle('hidden', !query);
-
-  showSection(resultsSection);
-  episodesGrid.innerHTML = '';
-  currentSeriesData = null;
-  showStates([loadingState]);
+async function loadEpisodes(seriesId, seasonNum) {
+  dom.episodesList.innerHTML = `
+    <div class="state" style="grid-column:1/-1">
+      <div class="spinner"></div>
+    </div>`;
 
   try {
-    const data = await fetchSearch(query);
-    renderResults(data);
+    const data = await fetchJSON(`/api/tv/${seriesId}/season/${seasonNum}`);
+    const episodes = data.episodes || [];
+
+    if (episodes.length === 0) {
+      dom.episodesList.innerHTML = `
+        <div class="state" style="grid-column:1/-1">
+          <p>No episodes in this season.</p>
+        </div>`;
+      return;
+    }
+
+    dom.episodesList.innerHTML = '';
+    episodes.forEach((ep) => {
+      const el = document.createElement('div');
+      el.className = 'episode';
+      el.tabIndex = 0;
+      el.setAttribute('role', 'button');
+
+      const epName = ep.name || `Episode ${ep.episode_number}`;
+      const date = ep.air_date
+        ? new Date(ep.air_date).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })
+        : '';
+
+      el.innerHTML = `
+        <div class="episode-num">E${ep.episode_number}</div>
+        <div class="episode-name">${escape(epName)}</div>
+        ${date ? `<div class="episode-date">${date}</div>` : ''}
+      `;
+
+      el.addEventListener('click', () => {
+        openPlayer(ep.id, `${seriesData.name} — ${epName}`);
+      });
+      el.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          el.click();
+        }
+      });
+
+      dom.episodesList.appendChild(el);
+    });
   } catch (err) {
-    showStates([errorState]);
-    errorMessage.textContent = err.message || 'Search failed. Please try again.';
+    dom.episodesList.innerHTML = `
+      <div class="state" style="grid-column:1/-1">
+        <p>${escape(err.message)}</p>
+      </div>`;
   }
 }
 
-function onSearchInput() {
-  const query = searchInput.value;
-  searchClear.classList.toggle('hidden', !query);
+function openPlayer(id, title) {
+  dom.playerMeta.textContent = title;
+  dom.playerIframe.src = `${VIDCORE_BASE}/${id}`;
+  showView(dom.playerView);
+}
+
+function closePlayer() {
+  dom.playerIframe.src = '';
+  if (seriesData) {
+    showView(dom.tvView);
+  } else {
+    showView(dom.resultsView);
+  }
+}
+
+function closeTv() {
+  seriesData = null;
+  dom.seasonSelect.innerHTML = '';
+  dom.episodesList.innerHTML = '';
+  showView(dom.resultsView);
+}
+
+// ─── EVENT BINDING ───
+
+dom.searchForm.addEventListener('submit', (e) => {
+  e.preventDefault();
+  clearTimeout(searchTimer);
+  doSearch(dom.searchInput.value);
+});
+
+dom.searchInput.addEventListener('input', () => {
+  const q = dom.searchInput.value;
+  dom.searchClear.classList.toggle('hidden', !q);
 
   clearTimeout(searchTimer);
-  if (query.trim().length === 0) {
+  if (!q.trim()) {
     lastQuery = '';
-    resultsGrid.innerHTML = '';
-    showStates([emptyState]);
-    emptyState.querySelector('p').textContent = 'Search for a movie or TV series to start';
+    dom.resultsGrid.innerHTML = '';
+    dom.resultsLabel.textContent = 'Results';
+    dom.resultsCount.textContent = '';
+    showView(dom.heroView);
     return;
   }
 
-  searchTimer = setTimeout(() => doSearch(query), 300);
-}
-
-searchForm.addEventListener('submit', (e) => {
-  e.preventDefault();
-  clearTimeout(searchTimer);
-  doSearch(searchInput.value);
+  searchTimer = setTimeout(() => doSearch(q), 300);
 });
 
-searchInput.addEventListener('input', onSearchInput);
-
-searchClear.addEventListener('click', () => {
-  searchInput.value = '';
-  searchInput.focus();
-  onSearchInput();
+dom.searchClear.addEventListener('click', () => {
+  dom.searchInput.value = '';
+  dom.searchInput.focus();
+  dom.searchClear.classList.add('hidden');
+  lastQuery = '';
+  dom.resultsGrid.innerHTML = '';
+  dom.resultsLabel.textContent = 'Results';
+  dom.resultsCount.textContent = '';
+  showView(dom.heroView);
 });
 
-retryBtn.addEventListener('click', () => {
+dom.resultsRetry.addEventListener('click', () => {
   if (lastQuery) doSearch(lastQuery);
 });
 
-tvBack.addEventListener('click', goBackFromTv);
+dom.tvBack.addEventListener('click', closeTv);
+dom.playerBack.addEventListener('click', closePlayer);
 
-playerBack.addEventListener('click', goBackFromPlayer);
-
-seasonSelect.addEventListener('change', () => {
-  const seasonNum = seasonSelect.value;
-  if (seasonNum && currentSeriesData) {
-    loadEpisodes(currentSeriesData.id, seasonNum);
-  }
+dom.seasonSelect.addEventListener('change', () => {
+  const num = dom.seasonSelect.value;
+  if (num && seriesData) loadEpisodes(seriesData.id, num);
 });
 
 document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') {
-    if (!playerSection.classList.contains('hidden')) {
-      goBackFromPlayer();
-    } else if (!tvSection.classList.contains('hidden')) {
-      goBackFromTv();
-    }
+    if (dom.playerView.classList.contains('active')) closePlayer();
+    else if (dom.tvView.classList.contains('active')) closeTv();
   }
 });
 
-showStates([emptyState]);
-resultsSection.classList.remove('hidden');
-resultsSection.classList.add('visible');
+showView(dom.heroView);
