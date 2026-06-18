@@ -1,5 +1,6 @@
 const IMG_BASE = 'https://image.tmdb.org/t/p/w500';
-const VIDCORE_BASE = 'https://vidcore.net/embed/movie';
+const VIDCORE_BASE = 'https://vidcore.net/movie';
+const VIDCORE_TV = 'https://vidcore.net/tv';
 
 const $ = (s) => document.querySelector(s);
 const $$ = (s) => document.querySelectorAll(s);
@@ -249,7 +250,7 @@ async function loadEpisodes(seriesId, seasonNum) {
       `;
 
       el.addEventListener('click', () => {
-        openPlayer(ep.id, `${seriesData.name} — ${epName}`);
+        openPlayer(seriesData.id, `${seriesData.name} — ${epName}`, seasonNum, ep.episode_number);
       });
       el.addEventListener('keydown', (e) => {
         if (e.key === 'Enter' || e.key === ' ') {
@@ -268,11 +269,15 @@ async function loadEpisodes(seriesId, seasonNum) {
   }
 }
 
-function openPlayer(id, title) {
+function openPlayer(id, title, season, episode) {
   dom.playerMeta.textContent = title;
   dom.playerIframe.src = '';
   showView(dom.playerView);
-  dom.playerIframe.src = `${VIDCORE_BASE}/${id}`;
+  if (season != null && episode != null) {
+    dom.playerIframe.src = `${VIDCORE_TV}/${id}/${season}/${episode}`;
+  } else {
+    dom.playerIframe.src = `${VIDCORE_BASE}/${id}`;
+  }
 }
 
 dom.playerIframe.addEventListener('error', () => {
