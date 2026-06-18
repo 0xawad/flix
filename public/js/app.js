@@ -1,5 +1,5 @@
 const IMG_BASE = 'https://image.tmdb.org/t/p/w500';
-const VIDCORE_BASE = 'https://vidcore.net/movie';
+const VIDCORE_BASE = 'https://vidcore.net/embed/movie';
 
 const $ = (s) => document.querySelector(s);
 const $$ = (s) => document.querySelectorAll(s);
@@ -269,9 +269,14 @@ async function loadEpisodes(seriesId, seasonNum) {
 
 function openPlayer(id, title) {
   dom.playerMeta.textContent = title;
-  dom.playerIframe.src = `${VIDCORE_BASE}/${id}`;
+  dom.playerIframe.src = '';
   showView(dom.playerView);
+  dom.playerIframe.src = `${VIDCORE_BASE}/${id}`;
 }
+
+dom.playerIframe.addEventListener('error', () => {
+  dom.playerIframe.style.display = 'none';
+});
 
 function closePlayer() {
   dom.playerIframe.src = '';
