@@ -271,6 +271,7 @@ async function loadEpisodes(seriesId, seasonNum) {
 function openPlayer(id, title, season, episode) {
   dom.playerMeta.textContent = title;
   dom.playerIframe.src = '';
+  document.body.classList.add('is-streaming');
   showView(dom.playerView);
   if (season != null && episode != null) {
     dom.playerIframe.src = `${VIDCORE_TV}/${id}/${season}/${episode}`;
@@ -284,6 +285,7 @@ dom.playerIframe.addEventListener('error', () => {
 });
 
 function closePlayer() {
+  document.body.classList.remove('is-streaming');
   dom.playerIframe.src = '';
   if (seriesData) {
     showView(dom.tvView);
