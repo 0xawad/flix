@@ -7,6 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&family=Righteous&display=swap" rel="stylesheet">
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg">
   <link rel="stylesheet" href="/css/style.css">
 </head>
 <body>
@@ -85,7 +86,11 @@
       </button>
       <div class="player-meta" id="player-meta"></div>
       <div class="player-wrap">
-        <iframe class="player-iframe" id="player-iframe" allow="autoplay; fullscreen" allowfullscreen></iframe>
+        <iframe class="player-iframe" id="player-iframe" allow="autoplay; fullscreen" allowfullscreen sandbox="allow-scripts allow-same-origin"></iframe>
+      </div>
+      <div class="player-episodes hidden" id="player-episodes">
+        <h3 class="player-episodes-heading">Episodes</h3>
+        <div class="episodes-list" id="player-episodes-list"></div>
       </div>
     </section>
 

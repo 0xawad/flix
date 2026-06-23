@@ -30,10 +30,14 @@ const dom = {
   playerBack: $('#player-back'),
   playerMeta: $('#player-meta'),
   playerIframe: $('#player-iframe'),
+  playerEpisodes: $('#player-episodes'),
+  playerEpisodesList: $('#player-episodes-list'),
 };
 
 let lastQuery = '';
 let seriesData = null;
+let currentSeasonEpisodes = [];
+let currentSeasonNum = null;
 
 function showView(view) {
   $$('.view').forEach((v) => v.classList.remove('active'));
@@ -70,6 +74,8 @@ async function doSearch(query) {
   if (!query || query === lastQuery) return;
   lastQuery = query;
   seriesData = null;
+  currentSeasonEpisodes = [];
+  currentSeasonNum = null;
   dom.searchClear.classList.remove('hidden');
 
   dom.resultsLoading.classList.remove('hidden');
@@ -213,6 +219,8 @@ async function openTv(id, title) {
 }
 
 async function loadEpisodes(seriesId, seasonNum) {
+  currentSeasonEpisodes = [];
+  currentSeasonNum = null;
   dom.episodesList.innerHTML = `
     <div class="state" style="grid-column:1/-1">
       <div class="spinner"></div>
@@ -221,6 +229,8 @@ async function loadEpisodes(seriesId, seasonNum) {
   try {
     const data = await fetchJSON(`/api/tv/${seriesId}/season/${seasonNum}`);
     const episodes = data.episodes || [];
+    currentSeasonEpisodes = episodes;
+    currentSeasonNum = seasonNum;
 
     if (episodes.length === 0) {
       dom.episodesList.innerHTML = `
@@ -268,6 +278,46 @@ async function loadEpisodes(seriesId, seasonNum) {
   }
 }
 
+function renderPlayerEpisodes(activeEpNum) {
+  dom.playerEpisodesList.innerHTML = '';
+  currentSeasonEpisodes.forEach((ep) => {
+    const el = document.createElement('div');
+    el.className = 'episode' + (ep.episode_number === activeEpNum ? ' episode--active' : '');
+    el.tabIndex = 0;
+    el.setAttribute('role', 'button');
+
+    const epName = ep.name || `Episode ${ep.episode_number}`;
+    const date = ep.air_date
+      ? new Date(ep.air_date).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })
+      : '';
+
+    el.innerHTML = `
+      <div class="episode-num">E${ep.episode_number}</div>
+      <div class="episode-name">${escape(epName)}</div>
+      ${date ? `<div class="episode-date">${date}</div>` : ''}
+    `;
+
+    el.addEventListener('click', () => switchPlayerEpisode(ep.episode_number));
+    el.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        el.click();
+      }
+    });
+
+    dom.playerEpisodesList.appendChild(el);
+  });
+}
+
+function switchPlayerEpisode(epNum) {
+  const ep = currentSeasonEpisodes.find((e) => e.episode_number === epNum);
+  if (!ep || !seriesData) return;
+  const epName = ep.name || `Episode ${epNum}`;
+  dom.playerMeta.textContent = `${seriesData.name} — ${epName}`;
+  dom.playerIframe.src = `${VIDCORE_TV}/${seriesData.id}/${currentSeasonNum}/${epNum}`;
+  renderPlayerEpisodes(epNum);
+}
+
 function openPlayer(id, title, season, episode) {
   dom.playerMeta.textContent = title;
   dom.playerIframe.src = '';
@@ -275,8 +325,15 @@ function openPlayer(id, title, season, episode) {
   showView(dom.playerView);
   if (season != null && episode != null) {
     dom.playerIframe.src = `${VIDCORE_TV}/${id}/${season}/${episode}`;
+    if (currentSeasonEpisodes.length > 0) {
+      dom.playerEpisodes.classList.remove('hidden');
+      renderPlayerEpisodes(episode);
+    } else {
+      dom.playerEpisodes.classList.add('hidden');
+    }
   } else {
     dom.playerIframe.src = `${VIDCORE_BASE}/${id}`;
+    dom.playerEpisodes.classList.add('hidden');
   }
 }
 
@@ -287,6 +344,7 @@ dom.playerIframe.addEventListener('error', () => {
 function closePlayer() {
   document.body.classList.remove('is-streaming');
   dom.playerIframe.src = '';
+  dom.playerEpisodes.classList.add('hidden');
   if (seriesData) {
     showView(dom.tvView);
   } else {
@@ -296,6 +354,8 @@ function closePlayer() {
 
 function closeTv() {
   seriesData = null;
+  currentSeasonEpisodes = [];
+  currentSeasonNum = null;
   dom.seasonSelect.innerHTML = '';
   dom.episodesList.innerHTML = '';
   showView(dom.resultsView);

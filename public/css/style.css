@@ -672,6 +672,29 @@ body {
   border: none;
 }
 
+/* ===== PLAYER EPISODES ===== */
+
+.player-episodes {
+  margin-top: 28px;
+}
+
+.player-episodes-heading {
+  font-family: var(--heading);
+  font-size: 1rem;
+  margin-bottom: 14px;
+  letter-spacing: 0.3px;
+  color: var(--text-dim);
+}
+
+.episode--active {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+}
+
+.episode--active .episode-num {
+  color: var(--accent);
+}
+
 /* ===== STREAMING (perf saver) ===== */
 
 body.is-streaming .bg-blobs { display: none; }
