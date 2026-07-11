@@ -6,9 +6,12 @@ const $ = (s) => document.querySelector(s);
 const $$ = (s) => document.querySelectorAll(s);
 
 const dom = {
-  searchForm: $('#search-form'),
+  searchFab: $('#search-fab'),
+  searchBar: $('#search-bar'),
+  searchBackdrop: $('#search-backdrop'),
   searchInput: $('#search-input'),
   searchClear: $('#search-clear'),
+  searchClose: $('#search-close'),
   resultsView: $('#results-view'),
   resultsGrid: $('#results-grid'),
   resultsLabel: $('#results-label'),
@@ -128,6 +131,11 @@ function handleRoute() {
         openTv(id, 'Loading...', true);
       }
     }
+  } else if (parts[0] === 'movie' && parts[1] && parts[2] === 'watch') {
+    const id = Number(parts[1]);
+    if (!id) return;
+    if (dom.playerView.classList.contains('active') && seriesData && seriesData.id === id) return;
+    openPlayer(id, dom.playerMeta.textContent || 'Loading...', undefined, undefined, true);
   } else {
     if (dom.resultsView.classList.contains('active') && !lastQuery) return;
     if (dom.tvView.classList.contains('active') || dom.playerView.classList.contains('active')) {
@@ -138,9 +146,25 @@ function handleRoute() {
   }
 }
 
+// ─── SEARCH BAR ───
+
+function openSearch() {
+  dom.searchBar.classList.add('is-active');
+  dom.searchBackdrop.classList.add('is-active');
+  dom.searchFab.classList.add('is-hidden');
+  dom.searchInput.focus();
+}
+
+function closeSearch() {
+  dom.searchBar.classList.remove('is-active');
+  dom.searchBackdrop.classList.remove('is-active');
+  dom.searchFab.classList.remove('is-hidden');
+}
+
 async function doSearch(query, fromRoute) {
   query = query.trim();
   if (!query || query === lastQuery) return;
+  closeSearch();
   lastQuery = query;
   seriesData = null;
   currentSeasonEpisodes = [];
@@ -543,18 +567,22 @@ function closeTv(silent) {
 
 // ─── EVENT BINDING ───
 
-dom.searchForm.addEventListener('submit', (e) => {
-  e.preventDefault();
-  doSearch(dom.searchInput.value);
+dom.searchFab.addEventListener('click', openSearch);
+
+dom.searchClose.addEventListener('click', closeSearch);
+
+dom.searchBackdrop.addEventListener('click', closeSearch);
+
+dom.searchInput.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') {
+    e.preventDefault();
+    doSearch(dom.searchInput.value);
+  }
 });
 
 dom.searchInput.addEventListener('input', () => {
   const q = dom.searchInput.value;
   dom.searchClear.classList.toggle('hidden', !q);
-  if (!q.trim()) {
-    lastQuery = '';
-    loadTrending();
-  }
 });
 
 dom.searchClear.addEventListener('click', () => {
@@ -582,8 +610,17 @@ dom.seasonSelect.addEventListener('change', () => {
 
 document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') {
-    if (dom.playerView.classList.contains('active')) closePlayer();
-    else if (dom.tvView.classList.contains('active')) closeTv();
+    if (dom.searchBar.classList.contains('is-active')) {
+      closeSearch();
+    } else if (dom.playerView.classList.contains('active')) {
+      closePlayer();
+    } else if (dom.tvView.classList.contains('active')) {
+      closeTv();
+    }
+  }
+  if (e.key === '/' && !dom.searchBar.classList.contains('is-active') && !dom.playerView.classList.contains('active')) {
+    e.preventDefault();
+    openSearch();
   }
 });
 

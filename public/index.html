@@ -19,26 +19,30 @@
     <div class="blob blob-4"></div>
   </div>
 
-  <header class="header">
-    <div class="header-inner">
-      <h1 class="logo">Flix</h1>
-      <form class="search-form" id="search-form">
-        <div class="search-wrap">
-          <svg class="search-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-          <input class="search-input" id="search-input" type="text" placeholder="Search movies & TV..." autocomplete="off">
-          <button class="search-clear hidden" id="search-clear" type="button" aria-label="Clear">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-          </button>
-        </div>
-      </form>
+  <button class="search-fab" id="search-fab" aria-label="Open search">
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+  </button>
+
+  <div class="search-bar" id="search-bar">
+    <div class="search-bar-inner">
+      <svg class="search-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+      <input class="search-input" id="search-input" type="text" placeholder="Search movies & TV..." autocomplete="off">
+      <button class="search-clear hidden" id="search-clear" type="button" aria-label="Clear">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+      <button class="search-close" id="search-close" type="button" aria-label="Close search">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
     </div>
-  </header>
+  </div>
+
+  <div class="search-backdrop" id="search-backdrop"></div>
 
   <main class="main">
 
     <section class="view" id="results-view">
       <div class="view-header">
-        <span class="view-label" id="results-label">Results</span>
+        <span class="view-label" id="results-label">Trending</span>
         <span class="view-count" id="results-count"></span>
       </div>
       <div class="results-grid" id="results-grid"></div>
