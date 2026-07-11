@@ -38,6 +38,7 @@ let lastQuery = '';
 let seriesData = null;
 let currentSeasonEpisodes = [];
 let currentSeasonNum = null;
+let seasonLoadGeneration = 0;
 
 function showView(view) {
   $$('.view').forEach((v) => v.classList.remove('active'));
@@ -52,7 +53,7 @@ function posterUrl(path) {
 function renderPoster(el, path, alt) {
   const url = posterUrl(path);
   el.innerHTML = url
-    ? `<img src="${url}" alt="${alt}" loading="lazy">`
+    ? `<img src="${url}" alt="${escape(alt)}" loading="lazy">`
     : `<div class="no-poster">No poster</div>`;
 }
 
@@ -69,7 +70,75 @@ async function fetchJSON(url) {
   return data;
 }
 
-async function doSearch(query) {
+function updateRoute() {
+  if (dom.playerView.classList.contains('active')) {
+    if (seriesData && currentSeasonNum != null) {
+      const ep = currentSeasonEpisodes.find((e) => e.episode_number != null && dom.playerMeta.textContent.includes(e.name || `Episode ${e.episode_number}`));
+      const epNum = ep ? ep.episode_number : currentSeasonNum;
+      location.hash = `#/tv/${seriesData.id}/watch/${currentSeasonNum}/${epNum}`;
+    } else {
+      location.hash = `#/movie/${seriesData ? seriesData.id : 'unknown'}/watch`;
+    }
+  } else if (dom.tvView.classList.contains('active') && seriesData) {
+    if (currentSeasonNum != null) {
+      location.hash = `#/tv/${seriesData.id}/season/${currentSeasonNum}`;
+    } else {
+      location.hash = `#/tv/${seriesData.id}`;
+    }
+  } else if (dom.resultsView.classList.contains('active') && lastQuery) {
+    location.hash = `#/search/${encodeURIComponent(lastQuery)}`;
+  } else {
+    location.hash = '#/';
+  }
+}
+
+function handleRoute() {
+  const hash = location.hash || '#/';
+  const parts = hash.slice(2).split('/');
+
+  if (parts[0] === 'search' && parts[1]) {
+    const query = decodeURIComponent(parts.slice(1).join('/'));
+    if (query && query !== lastQuery) {
+      dom.searchInput.value = query;
+      doSearch(query, true);
+    }
+  } else if (parts[0] === 'tv' && parts[1]) {
+    const id = Number(parts[1]);
+    if (!id) return;
+    if (parts[2] === 'watch' && parts[3] && parts[4]) {
+      const season = Number(parts[3]);
+      const episode = Number(parts[4]);
+      if (seriesData && seriesData.id === id && currentSeasonNum === season) {
+        openPlayer(id, dom.playerMeta.textContent, season, episode, true);
+      } else {
+        openTvAndWatch(id, season, episode);
+      }
+    } else if (parts[2] === 'season' && parts[3]) {
+      const season = Number(parts[3]);
+      if (seriesData && seriesData.id === id) {
+        if (currentSeasonNum !== season) {
+          dom.seasonSelect.value = season;
+          loadEpisodes(id, season);
+        }
+      } else {
+        openTvAndSeason(id, season);
+      }
+    } else {
+      if (!seriesData || seriesData.id !== id) {
+        openTv(id, 'Loading...', true);
+      }
+    }
+  } else {
+    if (dom.resultsView.classList.contains('active') && !lastQuery) return;
+    if (dom.tvView.classList.contains('active') || dom.playerView.classList.contains('active')) {
+      closeTv(true);
+      closePlayer(true);
+    }
+    if (!lastQuery) loadTrending();
+  }
+}
+
+async function doSearch(query, fromRoute) {
   query = query.trim();
   if (!query || query === lastQuery) return;
   lastQuery = query;
@@ -85,6 +154,7 @@ async function doSearch(query) {
   dom.resultsLabel.textContent = `Results for "${query}"`;
   dom.resultsCount.textContent = '';
   showView(dom.resultsView);
+  if (!fromRoute) updateRoute();
 
   try {
     const data = await fetchJSON(`/api/search?q=${encodeURIComponent(query)}`);
@@ -105,6 +175,7 @@ async function loadTrending() {
   dom.resultsEmpty.classList.add('hidden');
   dom.resultsError.classList.add('hidden');
   showView(dom.resultsView);
+  if (!lastQuery) updateRoute();
 
   try {
     const data = await fetchJSON('/api/trending');
@@ -140,9 +211,7 @@ function renderResults(data) {
     const imgUrl = posterUrl(item.poster_path);
     const isMovie = item.media_type === 'movie';
 
-    const posterHtml = imgUrl
-      ? `<img src="${imgUrl}" alt="${escape(title)}" loading="lazy">`
-      : `<div class="no-poster">No poster</div>`;
+    card.setAttribute('aria-label', `Play ${title}${year ? ` (${year})` : ''}`);
 
     const playIcon = '<svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3" fill="currentColor"/></svg>';
 
@@ -180,7 +249,7 @@ function handleSelect(item) {
   }
 }
 
-async function openTv(id, title) {
+async function openTv(id, title, fromRoute) {
   dom.tvLoading.classList.remove('hidden');
   dom.episodesList.innerHTML = '';
   dom.seasonSelect.innerHTML = '<option value="">Loading...</option>';
@@ -196,6 +265,18 @@ async function openTv(id, title) {
 
     dom.seasonSelect.innerHTML = '';
     const seasons = (data.seasons || []).filter((s) => s.season_number > 0);
+
+    if (seasons.length === 0) {
+      dom.tvLoading.classList.add('hidden');
+      dom.episodesList.innerHTML = `
+        <div class="state" style="grid-column:1/-1">
+          <p>No seasons available.</p>
+        </div>`;
+      if (!fromRoute) updateRoute();
+      dom.tvBack.focus();
+      return;
+    }
+
     seasons.forEach((s) => {
       const opt = document.createElement('option');
       opt.value = s.season_number;
@@ -205,10 +286,94 @@ async function openTv(id, title) {
 
     dom.tvLoading.classList.add('hidden');
 
-    if (seasons.length > 0) {
-      dom.seasonSelect.value = seasons[0].season_number;
-      loadEpisodes(id, seasons[0].season_number);
+    dom.seasonSelect.value = seasons[0].season_number;
+    loadEpisodes(id, seasons[0].season_number);
+    if (!fromRoute) updateRoute();
+    dom.tvBack.focus();
+  } catch (err) {
+    dom.tvLoading.classList.add('hidden');
+    dom.episodesList.innerHTML = `
+      <div class="state" style="grid-column:1/-1">
+        <p>${escape(err.message)}</p>
+      </div>`;
+  }
+}
+
+async function openTvAndSeason(id, season) {
+  dom.tvLoading.classList.remove('hidden');
+  dom.episodesList.innerHTML = '';
+  dom.seasonSelect.innerHTML = '<option value="">Loading...</option>';
+  showView(dom.tvView);
+
+  try {
+    const data = await fetchJSON(`/api/tv/${id}`);
+    seriesData = data;
+
+    dom.tvTitle.textContent = data.name || 'Untitled';
+    dom.tvOverview.textContent = data.overview || '';
+
+    const seasons = (data.seasons || []).filter((s) => s.season_number > 0);
+    dom.seasonSelect.innerHTML = '';
+    seasons.forEach((s) => {
+      const opt = document.createElement('option');
+      opt.value = s.season_number;
+      opt.textContent = `${s.name} (${s.episode_count} eps)`;
+      dom.seasonSelect.appendChild(opt);
+    });
+
+    renderPoster(dom.tvPoster, data.poster_path, data.name || 'Untitled');
+
+    dom.tvLoading.classList.add('hidden');
+
+    const targetSeason = seasons.find((s) => s.season_number === season) ? season : seasons[0]?.season_number;
+    if (targetSeason != null) {
+      dom.seasonSelect.value = targetSeason;
+      loadEpisodes(id, targetSeason);
     }
+    dom.tvBack.focus();
+  } catch (err) {
+    dom.tvLoading.classList.add('hidden');
+    dom.episodesList.innerHTML = `
+      <div class="state" style="grid-column:1/-1">
+        <p>${escape(err.message)}</p>
+      </div>`;
+  }
+}
+
+async function openTvAndWatch(id, season, episode) {
+  dom.tvLoading.classList.remove('hidden');
+  dom.episodesList.innerHTML = '';
+  dom.seasonSelect.innerHTML = '<option value="">Loading...</option>';
+  showView(dom.tvView);
+
+  try {
+    const data = await fetchJSON(`/api/tv/${id}`);
+    seriesData = data;
+
+    dom.tvTitle.textContent = data.name || 'Untitled';
+    dom.tvOverview.textContent = data.overview || '';
+
+    const seasons = (data.seasons || []).filter((s) => s.season_number > 0);
+    dom.seasonSelect.innerHTML = '';
+    seasons.forEach((s) => {
+      const opt = document.createElement('option');
+      opt.value = s.season_number;
+      opt.textContent = `${s.name} (${s.episode_count} eps)`;
+      dom.seasonSelect.appendChild(opt);
+    });
+
+    renderPoster(dom.tvPoster, data.poster_path, data.name || 'Untitled');
+
+    dom.tvLoading.classList.add('hidden');
+
+    const targetSeason = seasons.find((s) => s.season_number === season) ? season : seasons[0]?.season_number;
+    if (targetSeason != null) {
+      dom.seasonSelect.value = targetSeason;
+      await loadEpisodes(id, targetSeason);
+    }
+
+    const epName = currentSeasonEpisodes.find((e) => e.episode_number === episode)?.name || `Episode ${episode}`;
+    openPlayer(id, `${data.name} — ${epName}`, season, episode, true);
   } catch (err) {
     dom.tvLoading.classList.add('hidden');
     dom.episodesList.innerHTML = `
@@ -219,6 +384,7 @@ async function openTv(id, title) {
 }
 
 async function loadEpisodes(seriesId, seasonNum) {
+  const gen = ++seasonLoadGeneration;
   currentSeasonEpisodes = [];
   currentSeasonNum = null;
   dom.episodesList.innerHTML = `
@@ -228,6 +394,8 @@ async function loadEpisodes(seriesId, seasonNum) {
 
   try {
     const data = await fetchJSON(`/api/tv/${seriesId}/season/${seasonNum}`);
+    if (gen !== seasonLoadGeneration) return;
+
     const episodes = data.episodes || [];
     currentSeasonEpisodes = episodes;
     currentSeasonNum = seasonNum;
@@ -248,6 +416,8 @@ async function loadEpisodes(seriesId, seasonNum) {
       el.setAttribute('role', 'button');
 
       const epName = ep.name || `Episode ${ep.episode_number}`;
+      el.setAttribute('aria-label', `Play episode ${ep.episode_number}: ${epName}`);
+
       const date = ep.air_date
         ? new Date(ep.air_date).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })
         : '';
@@ -271,6 +441,7 @@ async function loadEpisodes(seriesId, seasonNum) {
       dom.episodesList.appendChild(el);
     });
   } catch (err) {
+    if (gen !== seasonLoadGeneration) return;
     dom.episodesList.innerHTML = `
       <div class="state" style="grid-column:1/-1">
         <p>${escape(err.message)}</p>
@@ -287,6 +458,8 @@ function renderPlayerEpisodes(activeEpNum) {
     el.setAttribute('role', 'button');
 
     const epName = ep.name || `Episode ${ep.episode_number}`;
+    el.setAttribute('aria-label', `Switch to episode ${ep.episode_number}: ${epName}`);
+
     const date = ep.air_date
       ? new Date(ep.air_date).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })
       : '';
@@ -316,9 +489,10 @@ function switchPlayerEpisode(epNum) {
   dom.playerMeta.textContent = `${seriesData.name} — ${epName}`;
   dom.playerIframe.src = `${VIDCORE_TV}/${seriesData.id}/${currentSeasonNum}/${epNum}`;
   renderPlayerEpisodes(epNum);
+  updateRoute();
 }
 
-function openPlayer(id, title, season, episode) {
+function openPlayer(id, title, season, episode, fromRoute) {
   dom.playerMeta.textContent = title;
   dom.playerIframe.src = '';
   document.body.classList.add('is-streaming');
@@ -335,30 +509,36 @@ function openPlayer(id, title, season, episode) {
     dom.playerIframe.src = `${VIDCORE_BASE}/${id}`;
     dom.playerEpisodes.classList.add('hidden');
   }
+  if (!fromRoute) updateRoute();
+  dom.playerBack.focus();
 }
 
 dom.playerIframe.addEventListener('error', () => {
   dom.playerIframe.style.display = 'none';
 });
 
-function closePlayer() {
+function closePlayer(silent) {
   document.body.classList.remove('is-streaming');
   dom.playerIframe.src = '';
   dom.playerEpisodes.classList.add('hidden');
   if (seriesData) {
     showView(dom.tvView);
+    dom.tvBack.focus();
   } else {
     showView(dom.resultsView);
+    dom.resultsGrid.focus();
   }
+  if (!silent) updateRoute();
 }
 
-function closeTv() {
+function closeTv(silent) {
   seriesData = null;
   currentSeasonEpisodes = [];
   currentSeasonNum = null;
   dom.seasonSelect.innerHTML = '';
   dom.episodesList.innerHTML = '';
   showView(dom.resultsView);
+  if (!silent) updateRoute();
 }
 
 // ─── EVENT BINDING ───
@@ -394,7 +574,10 @@ dom.playerBack.addEventListener('click', closePlayer);
 
 dom.seasonSelect.addEventListener('change', () => {
   const num = dom.seasonSelect.value;
-  if (num && seriesData) loadEpisodes(seriesData.id, num);
+  if (num && seriesData) {
+    loadEpisodes(seriesData.id, num);
+    updateRoute();
+  }
 });
 
 document.addEventListener('keydown', (e) => {
@@ -404,4 +587,12 @@ document.addEventListener('keydown', (e) => {
   }
 });
 
-loadTrending();
+window.addEventListener('hashchange', handleRoute);
+
+// ─── INIT ───
+
+if (location.hash && location.hash !== '#/') {
+  handleRoute();
+} else {
+  loadTrending();
+}
