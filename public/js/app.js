@@ -42,6 +42,7 @@ let seriesData = null;
 let currentSeasonEpisodes = [];
 let currentSeasonNum = null;
 let seasonLoadGeneration = 0;
+let allSeasonEpisodes = new Map();
 
 function showView(view) {
   $$('.view').forEach((v) => v.classList.remove('active'));
@@ -473,61 +474,123 @@ async function loadEpisodes(seriesId, seasonNum) {
   }
 }
 
-function renderPlayerEpisodes(activeEpNum) {
-  dom.playerEpisodesList.innerHTML = '';
-  currentSeasonEpisodes.forEach((ep) => {
-    const el = document.createElement('div');
-    el.className = 'episode' + (ep.episode_number === activeEpNum ? ' episode--active' : '');
-    el.tabIndex = 0;
-    el.setAttribute('role', 'button');
+function renderPlayerEpisodeCard(ep, isActive, seasonNum) {
+  const el = document.createElement('div');
+  el.className = 'episode' + (isActive ? ' episode--active' : '');
+  el.tabIndex = 0;
+  el.setAttribute('role', 'button');
 
-    const epName = ep.name || `Episode ${ep.episode_number}`;
-    el.setAttribute('aria-label', `Switch to episode ${ep.episode_number}: ${epName}`);
+  const epName = ep.name || `Episode ${ep.episode_number}`;
+  el.setAttribute('aria-label', `Play ${epName}`);
 
-    const date = ep.air_date
-      ? new Date(ep.air_date).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })
-      : '';
+  const date = ep.air_date
+    ? new Date(ep.air_date).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })
+    : '';
 
-    el.innerHTML = `
-      <div class="episode-num">E${ep.episode_number}</div>
-      <div class="episode-name">${escape(epName)}</div>
-      ${date ? `<div class="episode-date">${date}</div>` : ''}
-    `;
+  el.innerHTML = `
+    <div class="episode-num">E${ep.episode_number}</div>
+    <div class="episode-name">${escape(epName)}</div>
+    ${date ? `<div class="episode-date">${date}</div>` : ''}
+  `;
 
-    el.addEventListener('click', () => switchPlayerEpisode(ep.episode_number));
-    el.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter' || e.key === ' ') {
-        e.preventDefault();
-        el.click();
-      }
-    });
+  el.addEventListener('click', () => switchPlayerEpisode(seasonNum, ep.episode_number));
+  el.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      el.click();
+    }
+  });
 
-    dom.playerEpisodesList.appendChild(el);
+  return el;
+}
+
+function renderPlayerSeasonGroup(seasonNum, episodes, activeSeason, activeEpNum) {
+  const divider = document.createElement('div');
+  divider.className = 'season-divider';
+  divider.textContent = `Season ${seasonNum}`;
+  if (seasonNum === activeSeason) divider.classList.add('season-divider--active');
+  dom.playerEpisodesList.appendChild(divider);
+
+  episodes.forEach((ep) => {
+    const isActive = seasonNum === activeSeason && ep.episode_number === activeEpNum;
+    dom.playerEpisodesList.appendChild(renderPlayerEpisodeCard(ep, isActive, seasonNum));
   });
 }
 
-function switchPlayerEpisode(epNum) {
-  const ep = currentSeasonEpisodes.find((e) => e.episode_number === epNum);
+function renderAllPlayerEpisodes(activeSeason, activeEpNum) {
+  dom.playerEpisodesList.innerHTML = '';
+  const sorted = [...allSeasonEpisodes.keys()].sort((a, b) => a - b);
+  sorted.forEach((seasonNum) => {
+    renderPlayerSeasonGroup(seasonNum, allSeasonEpisodes.get(seasonNum), activeSeason, activeEpNum);
+  });
+}
+
+function highlightPlayerEpisode(activeSeason, activeEpNum) {
+  dom.playerEpisodesList.querySelectorAll('.episode--active').forEach((el) => el.classList.remove('episode--active'));
+  dom.playerEpisodesList.querySelectorAll('.season-divider--active').forEach((el) => el.classList.remove('season-divider--active'));
+
+  const dividers = dom.playerEpisodesList.querySelectorAll('.season-divider');
+  dividers.forEach((d) => {
+    const num = Number(d.textContent.replace('Season ', ''));
+    if (num === activeSeason) d.classList.add('season-divider--active');
+  });
+
+  const cards = dom.playerEpisodesList.querySelectorAll('.episode');
+  let idx = 0;
+  const sorted = [...allSeasonEpisodes.keys()].sort((a, b) => a - b);
+  for (const sn of sorted) {
+    const eps = allSeasonEpisodes.get(sn);
+    for (const ep of eps) {
+      if (sn === activeSeason && ep.episode_number === activeEpNum && cards[idx]) {
+        cards[idx].classList.add('episode--active');
+        cards[idx].scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+        return;
+      }
+      idx++;
+    }
+  }
+}
+
+async function fetchAndAppendSeason(seriesId, seasonNum, activeSeason, activeEpNum) {
+  try {
+    const data = await fetchJSON(`/api/tv/${seriesId}/season/${seasonNum}`);
+    const episodes = data.episodes || [];
+    allSeasonEpisodes.set(seasonNum, episodes);
+    renderPlayerSeasonGroup(seasonNum, episodes, activeSeason, activeEpNum);
+  } catch {
+    // skip failed seasons silently
+  }
+}
+
+function switchPlayerEpisode(season, epNum) {
+  const eps = allSeasonEpisodes.get(season);
+  const ep = eps ? eps.find((e) => e.episode_number === epNum) : null;
   if (!ep || !seriesData) return;
   const epName = ep.name || `Episode ${epNum}`;
+  currentSeasonEpisodes = eps;
+  currentSeasonNum = season;
   dom.playerMeta.textContent = `${seriesData.name} — ${epName}`;
-  dom.playerIframe.src = `${VIDCORE_TV}/${seriesData.id}/${currentSeasonNum}/${epNum}`;
-  renderPlayerEpisodes(epNum);
+  dom.playerIframe.src = `${VIDCORE_TV}/${seriesData.id}/${season}/${epNum}`;
+  highlightPlayerEpisode(season, epNum);
   updateRoute();
 }
 
-function openPlayer(id, title, season, episode, fromRoute) {
+async function openPlayer(id, title, season, episode, fromRoute) {
   dom.playerMeta.textContent = title;
   dom.playerIframe.src = '';
   document.body.classList.add('is-streaming');
   showView(dom.playerView);
   if (season != null && episode != null) {
     dom.playerIframe.src = `${VIDCORE_TV}/${id}/${season}/${episode}`;
-    if (currentSeasonEpisodes.length > 0) {
-      dom.playerEpisodes.classList.remove('hidden');
-      renderPlayerEpisodes(episode);
-    } else {
-      dom.playerEpisodes.classList.add('hidden');
+    dom.playerEpisodes.classList.remove('hidden');
+    allSeasonEpisodes.set(Number(season), currentSeasonEpisodes);
+    renderAllPlayerEpisodes(Number(season), Number(episode));
+    if (seriesData && seriesData.seasons) {
+      const otherSeasons = seriesData.seasons
+        .filter((s) => s.season_number > 0 && s.season_number !== Number(season));
+      for (const s of otherSeasons) {
+        fetchAndAppendSeason(id, s.season_number, Number(season), Number(episode));
+      }
     }
   } else {
     dom.playerIframe.src = `${VIDCORE_BASE}/${id}`;
@@ -545,6 +608,7 @@ function closePlayer(silent) {
   document.body.classList.remove('is-streaming');
   dom.playerIframe.src = '';
   dom.playerEpisodes.classList.add('hidden');
+  allSeasonEpisodes.clear();
   if (seriesData) {
     showView(dom.tvView);
     dom.tvBack.focus();

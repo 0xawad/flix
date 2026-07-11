@@ -742,6 +742,27 @@ body {
   color: var(--text-dim);
 }
 
+.season-divider {
+  grid-column: 1 / -1;
+  font-family: var(--heading);
+  font-size: 0.85rem;
+  color: var(--text-dimmer);
+  padding: 16px 0 6px;
+  letter-spacing: 0.3px;
+  border-top: 1px solid var(--border);
+  margin-top: 8px;
+}
+
+.season-divider:first-child {
+  border-top: none;
+  margin-top: 0;
+  padding-top: 0;
+}
+
+.season-divider--active {
+  color: var(--accent);
+}
+
 .episode--active {
   background: var(--accent-soft);
   border-color: var(--accent);
