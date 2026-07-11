@@ -587,9 +587,10 @@ async function openPlayer(id, title, season, episode, fromRoute) {
     renderAllPlayerEpisodes(Number(season), Number(episode));
     if (seriesData && seriesData.seasons) {
       const otherSeasons = seriesData.seasons
-        .filter((s) => s.season_number > 0 && s.season_number !== Number(season));
+        .filter((s) => s.season_number > 0 && s.season_number !== Number(season))
+        .sort((a, b) => a.season_number - b.season_number);
       for (const s of otherSeasons) {
-        fetchAndAppendSeason(id, s.season_number, Number(season), Number(episode));
+        await fetchAndAppendSeason(id, s.season_number, Number(season), Number(episode));
       }
     }
   } else {
