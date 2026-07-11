@@ -552,6 +552,7 @@ function highlightPlayerEpisode(activeSeason, activeEpNum) {
 }
 
 async function fetchAndAppendSeason(seriesId, seasonNum, activeSeason, activeEpNum) {
+  if (allSeasonEpisodes.has(seasonNum)) return;
   try {
     const data = await fetchJSON(`/api/tv/${seriesId}/season/${seasonNum}`);
     const episodes = data.episodes || [];
