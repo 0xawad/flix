@@ -772,6 +772,60 @@ body {
   color: var(--accent);
 }
 
+/* ===== SOURCE SWITCHER ===== */
+
+.source-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.source-label {
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: var(--text-dimmer);
+  white-space: nowrap;
+}
+
+.source-buttons {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.source-btn {
+  padding: 6px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--r);
+  background: var(--bg-glass);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  color: var(--text-dim);
+  font-family: var(--body);
+  font-size: 0.75rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.source-btn:hover {
+  background: var(--bg-glass-hover);
+  border-color: var(--border-hover);
+  color: var(--text);
+}
+
+.source-btn--active {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.source-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
 /* ===== STREAMING (perf saver) ===== */
 
 body.is-streaming .bg-blobs { display: none; }
@@ -799,6 +853,7 @@ body.is-streaming .search-fab {
   .tv-poster { width: 120px; height: 180px; }
   .season-row { justify-content: center; }
   .episodes-list { grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); }
+  .source-row { justify-content: center; }
 }
 
 @media (max-width: 600px) {
@@ -808,6 +863,9 @@ body.is-streaming .search-fab {
   .card-title { font-size: 0.8rem; }
   .episodes-list { grid-template-columns: 1fr; }
   .search-fab { top: 14px; right: 14px; width: 42px; height: 42px; }
+  .source-row { flex-wrap: wrap; }
+  .source-buttons { gap: 4px; }
+  .source-btn { padding: 5px 10px; font-size: 0.7rem; }
 }
 
 @media (min-width: 1200px) {

@@ -1,6 +1,27 @@
 const IMG_BASE = 'https://image.tmdb.org/t/p/w500';
-const VIDCORE_BASE = 'https://vidcore.net/movie';
-const VIDCORE_TV = 'https://vidcore.net/tv';
+
+const SOURCES = [
+  {
+    name: 'VidCore',
+    movie: (id) => `https://vidcore.net/movie/${id}`,
+    tv: (id, s, e) => `https://vidcore.net/tv/${id}/${s}/${e}`,
+  },
+  {
+    name: 'Vidsrc.to',
+    movie: (id) => `https://vidsrc.to/embed/movie/${id}`,
+    tv: (id, s, e) => `https://vidsrc.to/embed/tv/${id}/${s}/${e}`,
+  },
+  {
+    name: '2Embed',
+    movie: (id) => `https://www.2embed.cc/embed/tmdb/${id}`,
+    tv: (id, s, e) => `https://www.2embed.cc/embed/tmdb/${id}?s=${s}&e=${e}`,
+  },
+  {
+    name: 'MultiEmbed',
+    movie: (id) => `https://multiembed.mov/?video_id=${id}&tmdb=1`,
+    tv: (id, s, e) => `https://multiembed.mov/?video_id=${id}&tmdb=1&season=${s}&episode=${e}`,
+  },
+];
 
 const $ = (s) => document.querySelector(s);
 const $$ = (s) => document.querySelectorAll(s);
@@ -35,6 +56,7 @@ const dom = {
   playerIframe: $('#player-iframe'),
   playerEpisodes: $('#player-episodes'),
   playerEpisodesList: $('#player-episodes-list'),
+  sourceButtons: $('#source-buttons'),
 };
 
 let lastQuery = '';
@@ -43,6 +65,11 @@ let currentSeasonEpisodes = [];
 let currentSeasonNum = null;
 let seasonLoadGeneration = 0;
 let allSeasonEpisodes = new Map();
+let currentSourceIndex = 0;
+let currentPlayerId = null;
+let currentPlayerSeason = null;
+let currentPlayerEpisode = null;
+let fallbackTimer = null;
 
 function showView(view) {
   $$('.view').forEach((v) => v.classList.remove('active'));
@@ -571,9 +598,52 @@ function switchPlayerEpisode(season, epNum) {
   currentSeasonEpisodes = eps;
   currentSeasonNum = season;
   dom.playerMeta.textContent = `${seriesData.name} — ${epName}`;
-  dom.playerIframe.src = `${VIDCORE_TV}/${seriesData.id}/${season}/${epNum}`;
+
+  currentPlayerId = seriesData.id;
+  currentPlayerSeason = season;
+  currentPlayerEpisode = epNum;
+  loadCurrentSource();
+
   highlightPlayerEpisode(season, epNum);
   updateRoute();
+}
+
+function renderSourceButtons() {
+  dom.sourceButtons.innerHTML = '';
+  SOURCES.forEach((src, i) => {
+    const btn = document.createElement('button');
+    btn.className = 'source-btn' + (i === currentSourceIndex ? ' source-btn--active' : '');
+    btn.textContent = src.name;
+    btn.addEventListener('click', () => switchSource(i));
+    dom.sourceButtons.appendChild(btn);
+  });
+}
+
+function switchSource(index) {
+  if (index === currentSourceIndex) return;
+  currentSourceIndex = index;
+  renderSourceButtons();
+  loadCurrentSource();
+}
+
+function loadCurrentSource() {
+  if (currentPlayerId == null) return;
+  const src = SOURCES[currentSourceIndex];
+  clearTimeout(fallbackTimer);
+
+  if (currentPlayerSeason != null && currentPlayerEpisode != null) {
+    dom.playerIframe.src = src.tv(currentPlayerId, currentPlayerSeason, currentPlayerEpisode);
+  } else {
+    dom.playerIframe.src = src.movie(currentPlayerId);
+  }
+
+  fallbackTimer = setTimeout(() => {
+    if (currentSourceIndex < SOURCES.length - 1) {
+      currentSourceIndex++;
+      renderSourceButtons();
+      loadCurrentSource();
+    }
+  }, 8000);
 }
 
 async function openPlayer(id, title, season, episode, fromRoute) {
@@ -581,8 +651,14 @@ async function openPlayer(id, title, season, episode, fromRoute) {
   dom.playerIframe.src = '';
   document.body.classList.add('is-streaming');
   showView(dom.playerView);
+
+  currentPlayerId = id;
+  currentPlayerSeason = season ?? null;
+  currentPlayerEpisode = episode ?? null;
+
+  renderSourceButtons();
+
   if (season != null && episode != null) {
-    dom.playerIframe.src = `${VIDCORE_TV}/${id}/${season}/${episode}`;
     dom.playerEpisodes.classList.remove('hidden');
     allSeasonEpisodes.set(Number(season), currentSeasonEpisodes);
     renderAllPlayerEpisodes(Number(season), Number(episode));
@@ -595,15 +671,25 @@ async function openPlayer(id, title, season, episode, fromRoute) {
       }
     }
   } else {
-    dom.playerIframe.src = `${VIDCORE_BASE}/${id}`;
     dom.playerEpisodes.classList.add('hidden');
   }
+
+  loadCurrentSource();
   if (!fromRoute) updateRoute();
   dom.playerBack.focus();
 }
 
+dom.playerIframe.addEventListener('load', () => {
+  clearTimeout(fallbackTimer);
+});
+
 dom.playerIframe.addEventListener('error', () => {
-  dom.playerIframe.style.display = 'none';
+  clearTimeout(fallbackTimer);
+  if (currentSourceIndex < SOURCES.length - 1) {
+    currentSourceIndex++;
+    renderSourceButtons();
+    loadCurrentSource();
+  }
 });
 
 function closePlayer(silent) {
@@ -611,6 +697,10 @@ function closePlayer(silent) {
   dom.playerIframe.src = '';
   dom.playerEpisodes.classList.add('hidden');
   allSeasonEpisodes.clear();
+  clearTimeout(fallbackTimer);
+  currentPlayerId = null;
+  currentPlayerSeason = null;
+  currentPlayerEpisode = null;
   if (seriesData) {
     showView(dom.tvView);
     dom.tvBack.focus();
