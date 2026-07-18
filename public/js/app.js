@@ -7,19 +7,14 @@ const SOURCES = [
     tv: (id, s, e) => `https://vidcore.net/tv/${id}/${s}/${e}`,
   },
   {
-    name: 'Vidsrc',
-    movie: (id) => `https://vidsrc.to/embed/movie/${id}`,
-    tv: (id, s, e) => `https://vidsrc.to/embed/tv/${id}/${s}/${e}`,
+    name: '2Embed',
+    movie: (id) => `https://www.2embed.skin/embed/tmdb/${id}`,
+    tv: (id, s, e) => `https://www.2embed.skin/embed/tmdb/${id}?season=${s}&episode=${e}`,
   },
   {
     name: 'EmbedBandit',
     movie: (id) => `https://embedbandit.com/embed/movie?tmdb=${id}`,
-    tv: (id, s, e) => `https://embedbandit.com/embed/tv?tmdb=${id}&season=${s}&episode=${e}`,
-  },
-  {
-    name: 'ApiPlayer',
-    movie: (id) => `https://apiplayer.ru/embed/movie/${id}`,
-    tv: (id, s, e) => `https://apiplayer.ru/embed/tv/${id}/${s}/${e}`,
+    tv: null,
   },
 ];
 
@@ -626,20 +621,42 @@ function switchSource(index) {
   loadCurrentSource();
 }
 
+function nextSource() {
+  const isTv = currentPlayerSeason != null && currentPlayerEpisode != null;
+  let next = currentSourceIndex + 1;
+  while (next < SOURCES.length) {
+    if (!isTv || SOURCES[next].tv) break;
+    next++;
+  }
+  return next < SOURCES.length ? next : -1;
+}
+
 function loadCurrentSource() {
   if (currentPlayerId == null) return;
+  const isTv = currentPlayerSeason != null && currentPlayerEpisode != null;
   const src = SOURCES[currentSourceIndex];
   clearTimeout(fallbackTimer);
 
-  if (currentPlayerSeason != null && currentPlayerEpisode != null) {
+  if (isTv && !src.tv) {
+    const n = nextSource();
+    if (n >= 0) {
+      currentSourceIndex = n;
+      renderSourceButtons();
+      loadCurrentSource();
+    }
+    return;
+  }
+
+  if (isTv) {
     dom.playerIframe.src = src.tv(currentPlayerId, currentPlayerSeason, currentPlayerEpisode);
   } else {
     dom.playerIframe.src = src.movie(currentPlayerId);
   }
 
   fallbackTimer = setTimeout(() => {
-    if (currentSourceIndex < SOURCES.length - 1) {
-      currentSourceIndex++;
+    const n = nextSource();
+    if (n >= 0) {
+      currentSourceIndex = n;
       renderSourceButtons();
       loadCurrentSource();
     }
@@ -685,8 +702,9 @@ dom.playerIframe.addEventListener('load', () => {
 
 dom.playerIframe.addEventListener('error', () => {
   clearTimeout(fallbackTimer);
-  if (currentSourceIndex < SOURCES.length - 1) {
-    currentSourceIndex++;
+  const n = nextSource();
+  if (n >= 0) {
+    currentSourceIndex = n;
     renderSourceButtons();
     loadCurrentSource();
   }
