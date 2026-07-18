@@ -7,19 +7,19 @@ const SOURCES = [
     tv: (id, s, e) => `https://vidcore.net/tv/${id}/${s}/${e}`,
   },
   {
-    name: 'Vidsrc.to',
+    name: 'Vidsrc',
     movie: (id) => `https://vidsrc.to/embed/movie/${id}`,
     tv: (id, s, e) => `https://vidsrc.to/embed/tv/${id}/${s}/${e}`,
   },
   {
-    name: '2Embed',
-    movie: (id) => `https://www.2embed.cc/embed/tmdb/${id}`,
-    tv: (id, s, e) => `https://www.2embed.cc/embed/tmdb/${id}?s=${s}&e=${e}`,
+    name: 'EmbedBandit',
+    movie: (id) => `https://embedbandit.com/embed/movie?tmdb=${id}`,
+    tv: (id, s, e) => `https://embedbandit.com/embed/tv?tmdb=${id}&season=${s}&episode=${e}`,
   },
   {
-    name: 'MultiEmbed',
-    movie: (id) => `https://multiembed.mov/?video_id=${id}&tmdb=1`,
-    tv: (id, s, e) => `https://multiembed.mov/?video_id=${id}&tmdb=1&season=${s}&episode=${e}`,
+    name: 'ApiPlayer',
+    movie: (id) => `https://apiplayer.ru/embed/movie/${id}`,
+    tv: (id, s, e) => `https://apiplayer.ru/embed/tv/${id}/${s}/${e}`,
   },
 ];
 
