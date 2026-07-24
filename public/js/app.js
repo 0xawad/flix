@@ -2,6 +2,11 @@ const IMG_BASE = 'https://image.tmdb.org/t/p/w500';
 
 const SOURCES = [
   {
+    name: 'VidCore',
+    movie: (id) => `https://vidcore.net/movie/${id}`,
+    tv: (id, s, e) => `https://vidcore.net/tv/${id}/${s}/${e}`,
+  },
+  {
     name: 'Peachify',
     movie: (id) => `https://peachify.top/embed/movie/${id}`,
     tv: (id, s, e) => `https://peachify.top/embed/tv/${id}/${s}/${e}`,
