@@ -2,19 +2,19 @@ const IMG_BASE = 'https://image.tmdb.org/t/p/w500';
 
 const SOURCES = [
   {
-    name: 'VidCore',
-    movie: (id) => `https://vidcore.net/movie/${id}`,
-    tv: (id, s, e) => `https://vidcore.net/tv/${id}/${s}/${e}`,
+    name: 'Peachify',
+    movie: (id) => `https://peachify.top/embed/movie/${id}`,
+    tv: (id, s, e) => `https://peachify.top/embed/tv/${id}/${s}/${e}`,
   },
   {
-    name: '2Embed',
-    movie: (id) => `https://www.2embed.skin/embed/tmdb/${id}`,
-    tv: (id, s, e) => `https://www.2embed.skin/embed/tmdb/${id}?season=${s}&episode=${e}`,
+    name: 'VidFast',
+    movie: (id) => `https://vidfast.vc/movie/${id}`,
+    tv: (id, s, e) => `https://vidfast.vc/tv/${id}/${s}/${e}`,
   },
   {
-    name: 'EmbedBandit',
-    movie: (id) => `https://embedbandit.com/embed/movie?tmdb=${id}`,
-    tv: null,
+    name: 'VidNest',
+    movie: (id) => `https://vidnest.fun/movie/${id}`,
+    tv: (id, s, e) => `https://vidnest.fun/tv/${id}/${s}/${e}`,
   },
 ];
 
@@ -539,14 +539,6 @@ function renderPlayerSeasonGroup(seasonNum, episodes, activeSeason, activeEpNum)
   });
 }
 
-function renderAllPlayerEpisodes(activeSeason, activeEpNum) {
-  dom.playerEpisodesList.innerHTML = '';
-  const sorted = [...allSeasonEpisodes.keys()].sort((a, b) => a - b);
-  sorted.forEach((seasonNum) => {
-    renderPlayerSeasonGroup(seasonNum, allSeasonEpisodes.get(seasonNum), activeSeason, activeEpNum);
-  });
-}
-
 function highlightPlayerEpisode(activeSeason, activeEpNum) {
   dom.playerEpisodesList.querySelectorAll('.episode--active').forEach((el) => el.classList.remove('episode--active'));
   dom.playerEpisodesList.querySelectorAll('.season-divider--active').forEach((el) => el.classList.remove('season-divider--active'));
@@ -677,13 +669,13 @@ async function openPlayer(id, title, season, episode, fromRoute) {
 
   if (season != null && episode != null) {
     dom.playerEpisodes.classList.remove('hidden');
-    allSeasonEpisodes.set(Number(season), currentSeasonEpisodes);
-    renderAllPlayerEpisodes(Number(season), Number(episode));
+    allSeasonEpisodes.clear();
+    dom.playerEpisodesList.innerHTML = '';
     if (seriesData && seriesData.seasons) {
-      const otherSeasons = seriesData.seasons
-        .filter((s) => s.season_number > 0 && s.season_number !== Number(season))
+      const allSeasons = seriesData.seasons
+        .filter((s) => s.season_number > 0)
         .sort((a, b) => a.season_number - b.season_number);
-      for (const s of otherSeasons) {
+      for (const s of allSeasons) {
         await fetchAndAppendSeason(id, s.season_number, Number(season), Number(episode));
       }
     }
