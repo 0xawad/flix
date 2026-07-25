@@ -734,33 +734,52 @@ body {
   margin-top: 28px;
 }
 
-.player-episodes-heading {
-  font-family: var(--heading);
-  font-size: 1rem;
-  margin-bottom: 14px;
-  letter-spacing: 0.3px;
+/* ===== SEASON TABS ===== */
+
+.season-tabs {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  padding-bottom: 16px;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.season-tabs::-webkit-scrollbar { display: none; }
+
+.season-tab {
+  flex-shrink: 0;
+  padding: 7px 16px;
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  background: var(--bg-glass);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
   color: var(--text-dim);
+  font-family: var(--body);
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.25s var(--ease);
+  white-space: nowrap;
 }
 
-.season-divider {
-  grid-column: 1 / -1;
-  font-family: var(--heading);
-  font-size: 0.85rem;
-  color: var(--text-dimmer);
-  padding: 16px 0 6px;
-  letter-spacing: 0.3px;
-  border-top: 1px solid var(--border);
-  margin-top: 8px;
+.season-tab:hover {
+  background: var(--bg-glass-hover);
+  border-color: var(--border-hover);
+  color: var(--text);
 }
 
-.season-divider:first-child {
-  border-top: none;
-  margin-top: 0;
-  padding-top: 0;
-}
-
-.season-divider--active {
+.season-tab--active {
+  background: var(--accent-soft);
+  border-color: var(--accent);
   color: var(--accent);
+  box-shadow: 0 0 20px rgba(34, 197, 94, 0.12);
+}
+
+.season-tab:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 
 .episode--active {

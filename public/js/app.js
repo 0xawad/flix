@@ -56,6 +56,7 @@ const dom = {
   playerIframe: $('#player-iframe'),
   playerEpisodes: $('#player-episodes'),
   playerEpisodesList: $('#player-episodes-list'),
+  seasonTabs: $('#season-tabs'),
   sourceButtons: $('#source-buttons'),
 };
 
@@ -65,6 +66,8 @@ let currentSeasonEpisodes = [];
 let currentSeasonNum = null;
 let seasonLoadGeneration = 0;
 let allSeasonEpisodes = new Map();
+let availableSeasons = [];
+let activePlayerSeason = null;
 let currentSourceIndex = 0;
 let currentPlayerId = null;
 let currentPlayerSeason = null;
@@ -531,55 +534,42 @@ function renderPlayerEpisodeCard(ep, isActive, seasonNum) {
   return el;
 }
 
-function renderPlayerSeasonGroup(seasonNum, episodes, activeSeason, activeEpNum) {
-  const divider = document.createElement('div');
-  divider.className = 'season-divider';
-  divider.textContent = `Season ${seasonNum}`;
-  if (seasonNum === activeSeason) divider.classList.add('season-divider--active');
-  dom.playerEpisodesList.appendChild(divider);
+function renderSeasonTabs(activeSeason) {
+  dom.seasonTabs.innerHTML = '';
+  for (const s of availableSeasons) {
+    const btn = document.createElement('button');
+    btn.className = 'season-tab' + (s.season_number === activeSeason ? ' season-tab--active' : '');
+    btn.textContent = `S${s.season_number}`;
+    btn.setAttribute('aria-label', `Season ${s.season_number}`);
+    btn.addEventListener('click', () => switchPlayerSeasonTab(s.season_number));
+    dom.seasonTabs.appendChild(btn);
+  }
+}
 
+function renderActiveSeasonEpisodes(seasonNum, activeEpNum) {
+  dom.playerEpisodesList.innerHTML = '';
+  const episodes = allSeasonEpisodes.get(seasonNum);
+  if (!episodes) return;
   episodes.forEach((ep) => {
-    const isActive = seasonNum === activeSeason && ep.episode_number === activeEpNum;
-    dom.playerEpisodesList.appendChild(renderPlayerEpisodeCard(ep, isActive, seasonNum));
+    dom.playerEpisodesList.appendChild(renderPlayerEpisodeCard(ep, ep.episode_number === activeEpNum, seasonNum));
   });
+  const activeCard = dom.playerEpisodesList.querySelector('.episode--active');
+  if (activeCard) activeCard.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
 }
 
-function highlightPlayerEpisode(activeSeason, activeEpNum) {
-  dom.playerEpisodesList.querySelectorAll('.episode--active').forEach((el) => el.classList.remove('episode--active'));
-  dom.playerEpisodesList.querySelectorAll('.season-divider--active').forEach((el) => el.classList.remove('season-divider--active'));
+async function switchPlayerSeasonTab(seasonNum) {
+  if (seasonNum === activePlayerSeason) return;
+  activePlayerSeason = seasonNum;
+  renderSeasonTabs(seasonNum);
 
-  const dividers = dom.playerEpisodesList.querySelectorAll('.season-divider');
-  dividers.forEach((d) => {
-    const num = Number(d.textContent.replace('Season ', ''));
-    if (num === activeSeason) d.classList.add('season-divider--active');
-  });
-
-  const cards = dom.playerEpisodesList.querySelectorAll('.episode');
-  let idx = 0;
-  const sorted = [...allSeasonEpisodes.keys()].sort((a, b) => a - b);
-  for (const sn of sorted) {
-    const eps = allSeasonEpisodes.get(sn);
-    for (const ep of eps) {
-      if (sn === activeSeason && ep.episode_number === activeEpNum && cards[idx]) {
-        cards[idx].classList.add('episode--active');
-        cards[idx].scrollIntoView({ block: 'nearest', behavior: 'smooth' });
-        return;
-      }
-      idx++;
-    }
+  if (!allSeasonEpisodes.has(seasonNum)) {
+    try {
+      const data = await fetchJSON(`/api/tv/${currentPlayerId}/season/${seasonNum}`);
+      allSeasonEpisodes.set(seasonNum, data.episodes || []);
+    } catch { return; }
   }
-}
 
-async function fetchAndAppendSeason(seriesId, seasonNum, activeSeason, activeEpNum) {
-  if (allSeasonEpisodes.has(seasonNum)) return;
-  try {
-    const data = await fetchJSON(`/api/tv/${seriesId}/season/${seasonNum}`);
-    const episodes = data.episodes || [];
-    allSeasonEpisodes.set(seasonNum, episodes);
-    renderPlayerSeasonGroup(seasonNum, episodes, activeSeason, activeEpNum);
-  } catch {
-    // skip failed seasons silently
-  }
+  renderActiveSeasonEpisodes(seasonNum, currentPlayerEpisode);
 }
 
 function switchPlayerEpisode(season, epNum) {
@@ -596,7 +586,11 @@ function switchPlayerEpisode(season, epNum) {
   currentPlayerEpisode = epNum;
   loadCurrentSource();
 
-  highlightPlayerEpisode(season, epNum);
+  if (season !== activePlayerSeason) {
+    activePlayerSeason = season;
+    renderSeasonTabs(season);
+  }
+  renderActiveSeasonEpisodes(season, epNum);
   updateRoute();
 }
 
@@ -675,15 +669,23 @@ async function openPlayer(id, title, season, episode, fromRoute) {
   if (season != null && episode != null) {
     dom.playerEpisodes.classList.remove('hidden');
     allSeasonEpisodes.clear();
-    dom.playerEpisodesList.innerHTML = '';
-    if (seriesData && seriesData.seasons) {
-      const allSeasons = seriesData.seasons
-        .filter((s) => s.season_number > 0)
-        .sort((a, b) => a.season_number - b.season_number);
-      for (const s of allSeasons) {
-        await fetchAndAppendSeason(id, s.season_number, Number(season), Number(episode));
-      }
+
+    availableSeasons = (seriesData && seriesData.seasons
+      ? seriesData.seasons.filter((s) => s.season_number > 0)
+      : []
+    ).sort((a, b) => a.season_number - b.season_number);
+
+    activePlayerSeason = Number(season);
+    renderSeasonTabs(activePlayerSeason);
+
+    if (!allSeasonEpisodes.has(activePlayerSeason)) {
+      try {
+        const data = await fetchJSON(`/api/tv/${id}/season/${activePlayerSeason}`);
+        allSeasonEpisodes.set(activePlayerSeason, data.episodes || []);
+      } catch { /* empty */ }
     }
+
+    renderActiveSeasonEpisodes(activePlayerSeason, Number(episode));
   } else {
     dom.playerEpisodes.classList.add('hidden');
   }
@@ -712,6 +714,10 @@ function closePlayer(silent) {
   dom.playerIframe.src = '';
   dom.playerEpisodes.classList.add('hidden');
   allSeasonEpisodes.clear();
+  availableSeasons = [];
+  activePlayerSeason = null;
+  dom.seasonTabs.innerHTML = '';
+  dom.playerEpisodesList.innerHTML = '';
   clearTimeout(fallbackTimer);
   currentPlayerId = null;
   currentPlayerSeason = null;
