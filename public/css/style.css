@@ -484,6 +484,8 @@ body {
 
 .state p { font-size: 0.9rem; }
 
+.state--full { grid-column: 1 / -1; }
+
 .spinner {
   width: 24px; height: 24px;
   border: 2.5px solid rgba(255, 255, 255, 0.06);

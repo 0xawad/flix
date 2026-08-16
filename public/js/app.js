@@ -324,7 +324,7 @@ async function openTv(id, title, fromRoute) {
     if (seasons.length === 0) {
       dom.tvLoading.classList.add('hidden');
       dom.episodesList.innerHTML = `
-        <div class="state" style="grid-column:1/-1">
+        <div class="state state--full">
           <p>No seasons available.</p>
         </div>`;
       if (!fromRoute) updateRoute();
@@ -348,7 +348,7 @@ async function openTv(id, title, fromRoute) {
   } catch (err) {
     dom.tvLoading.classList.add('hidden');
     dom.episodesList.innerHTML = `
-      <div class="state" style="grid-column:1/-1">
+      <div class="state state--full">
         <p>${escape(err.message)}</p>
       </div>`;
   }
@@ -389,7 +389,7 @@ async function openTvAndSeason(id, season) {
   } catch (err) {
     dom.tvLoading.classList.add('hidden');
     dom.episodesList.innerHTML = `
-      <div class="state" style="grid-column:1/-1">
+      <div class="state state--full">
         <p>${escape(err.message)}</p>
       </div>`;
   }
@@ -432,7 +432,7 @@ async function openTvAndWatch(id, season, episode) {
   } catch (err) {
     dom.tvLoading.classList.add('hidden');
     dom.episodesList.innerHTML = `
-      <div class="state" style="grid-column:1/-1">
+      <div class="state state--full">
         <p>${escape(err.message)}</p>
       </div>`;
   }
@@ -443,7 +443,7 @@ async function loadEpisodes(seriesId, seasonNum) {
   currentSeasonEpisodes = [];
   currentSeasonNum = null;
   dom.episodesList.innerHTML = `
-    <div class="state" style="grid-column:1/-1">
+    <div class="state state--full">
       <div class="spinner"></div>
     </div>`;
 
@@ -457,7 +457,7 @@ async function loadEpisodes(seriesId, seasonNum) {
 
     if (episodes.length === 0) {
       dom.episodesList.innerHTML = `
-        <div class="state" style="grid-column:1/-1">
+        <div class="state state--full">
           <p>No episodes in this season.</p>
         </div>`;
       return;
@@ -498,7 +498,7 @@ async function loadEpisodes(seriesId, seasonNum) {
   } catch (err) {
     if (gen !== seasonLoadGeneration) return;
     dom.episodesList.innerHTML = `
-      <div class="state" style="grid-column:1/-1">
+      <div class="state state--full">
         <p>${escape(err.message)}</p>
       </div>`;
   }
