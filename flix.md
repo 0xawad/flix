@@ -52,23 +52,29 @@ On a `401` with `challenge`, the client loads Turnstile, renders the widget in a
 
 ## Client
 
+### Views
+- **Home**: the #1 trending title with a backdrop as the hero, then Continue watching, Trending now, Popular movies and Popular series as horizontal rows.
+- **Search**: a poster grid with "Load more".
+- **Title page** (movies and series): backdrop, poster, rating, year, runtime or season count, genres and overview. The play button says "Continue S·E" when you've already started a series. Series get season pills and an episode list with thumbnails, and upcoming episodes show "Airs …".
+- **Player**: a theater-style 16:9 frame, server switcher, Next episode (button or `N`), and the season's episodes underneath.
+
 ### Routing
-Hash routes, written with `history.pushState`/`replaceState` and read on `popstate`:
+Everything comes from the URL hash. `onRoute()` (on `hashchange`) parses it and renders the matching view. Links are real anchors. Switching seasons and episodes uses `location.replace`, so Back always leaves the player or title page.
 
 | Hash | View |
 |------|------|
-| `#/` | Continue watching + Trending |
-| `#/search/{query}` | Search results (with Load more) |
-| `#/tv/{id}` · `#/tv/{id}/season/{n}` | Series and episode list |
-| `#/tv/{id}/watch/{season}/{episode}` | Episode player |
+| `#/` | Home |
+| `#/search/{query}` | Search results |
+| `#/movie/{id}` | Movie title page |
+| `#/tv/{id}` · `#/tv/{id}/season/{n}` | Series title page |
 | `#/movie/{id}/watch` | Movie player |
+| `#/tv/{id}/watch/{season}/{episode}` | Episode player |
 
-`currentRoute()` builds the hash from the player's own ids (`currentPlayerId/Season/Episode`), so every view can be shared and reloaded. In-app navigation updates the URL without re-running the router. Back and forward go through `handleRoute()`.
+API responses are memoized for the page's lifetime (`api()`), and hovering a card prefetches its details. Scroll positions are restored on back and forward. Keyboard: `/` focuses search, `Esc` goes back, and `N` plays the next episode.
 
 ### Player
-- Each source in `SOURCES` builds a movie or TV embed URL from TMDB ids. The buttons switch between sources.
-- Each load inserts a **fresh iframe** (`setPlayerSrc`), because changing an existing iframe's `src` adds a browser-history entry and breaks Back.
-- Next episode (button, or the `N` key) moves through the season and then into the next one.
+- Each source in `SOURCES` builds a movie or TV embed URL from TMDB ids.
+- Each load inserts a **fresh iframe** (`setPlayerSrc`), because changing an existing iframe's `src` adds a browser-history entry and breaks Back. Leaving the player removes the iframe.
 
 ### Continue watching
 Stored in `localStorage` under `flix:history`. It keeps up to 20 entries, one per movie or series, and a series remembers its latest episode. It's per browser, and nothing is sent to the server.

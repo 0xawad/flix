@@ -2,41 +2,52 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Flix — Search & Stream</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="theme-color" content="#07070c">
+  <meta name="description" content="Search movies and TV series and start watching in seconds.">
+  <title>Flix</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="preconnect" href="https://image.tmdb.org" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&family=Righteous&display=swap" rel="stylesheet">
   <link rel="icon" type="image/svg+xml" href="/favicon.svg">
-  <link rel="stylesheet" href="/css/style.css?v=a5da68e901">
+  <link rel="stylesheet" href="/css/style.css?v=f4a2dc11f5">
 </head>
 <body>
 
-  <div class="bg-blobs">
-    <div class="blob blob-1"></div>
-    <div class="blob blob-2"></div>
-    <div class="blob blob-3"></div>
-    <div class="blob blob-4"></div>
-  </div>
+  <svg class="sprite" aria-hidden="true">
+    <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7.5"/><line x1="20.5" y1="20.5" x2="16.4" y2="16.4"/></symbol>
+    <symbol id="i-x" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></symbol>
+    <symbol id="i-play" viewBox="0 0 24 24"><path d="M7 4.5v15l12.5-7.5z" fill="currentColor" stroke="none"/></symbol>
+    <symbol id="i-next" viewBox="0 0 24 24"><path d="M5 4.5v15L16 12z" fill="currentColor" stroke="none"/><line x1="19" y1="5" x2="19" y2="19"/></symbol>
+    <symbol id="i-back" viewBox="0 0 24 24"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></symbol>
+    <symbol id="i-left" viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"/></symbol>
+    <symbol id="i-right" viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"/></symbol>
+    <symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><line x1="12" y1="11" x2="12" y2="16"/><line x1="12" y1="8" x2="12" y2="8"/></symbol>
+    <symbol id="i-star" viewBox="0 0 24 24"><path d="M12 3.5l2.6 5.4 5.9.8-4.3 4.1 1 5.8L12 16.8l-5.2 2.8 1-5.8-4.3-4.1 5.9-.8z" fill="currentColor" stroke="none"/></symbol>
+    <symbol id="i-film" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><line x1="7" y1="4" x2="7" y2="20"/><line x1="17" y1="4" x2="17" y2="20"/><line x1="3" y1="12" x2="21" y2="12"/></symbol>
+  </svg>
 
-  <button class="search-fab" id="search-fab" aria-label="Open search">
-    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-  </button>
-
-  <div class="search-bar" id="search-bar">
-    <div class="search-bar-inner">
-      <svg class="search-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-      <input class="search-input" id="search-input" type="text" placeholder="Search movies & TV..." autocomplete="off">
-      <button class="search-clear hidden" id="search-clear" type="button" aria-label="Clear">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-      </button>
-      <button class="search-close" id="search-close" type="button" aria-label="Close search">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-      </button>
+  <header class="topbar" id="topbar">
+    <div class="topbar-inner">
+      <a class="logo" href="#/" aria-label="Flix home">flix<span class="logo-dot"></span></a>
+      <form class="search" id="search-form" role="search" autocomplete="off">
+        <svg class="icon search-icon" aria-hidden="true"><use href="#i-search"/></svg>
+        <input class="search-input" id="search-input" type="search" name="q" placeholder="Search movies & TV" aria-label="Search movies and TV" enterkeyhint="search" maxlength="100">
+        <kbd class="search-kbd" aria-hidden="true">/</kbd>
+        <button class="search-clear hidden" id="search-clear" type="button" aria-label="Clear search">
+          <svg class="icon" aria-hidden="true"><use href="#i-x"/></svg>
+        </button>
+      </form>
     </div>
-  </div>
+  </header>
 
-  <div class="search-backdrop" id="search-backdrop"></div>
+  <main class="main" id="main">
+    <section class="view" id="view-home" aria-label="Home"></section>
+    <section class="view" id="view-search" aria-label="Search results"></section>
+    <section class="view" id="view-title" aria-label="Title details"></section>
+    <section class="view" id="view-player" aria-label="Player"></section>
+  </main>
 
   <div class="verify-overlay hidden" id="verify-overlay" role="dialog" aria-modal="true" aria-labelledby="verify-title">
     <div class="verify-box">
@@ -45,85 +56,6 @@
     </div>
   </div>
 
-  <main class="main">
-
-    <section class="view" id="results-view">
-      <div class="continue-row hidden" id="continue-row">
-        <div class="view-header">
-          <span class="view-label">Continue watching</span>
-        </div>
-        <div class="continue-grid" id="continue-grid"></div>
-      </div>
-      <div class="view-header">
-        <span class="view-label" id="results-label">Trending</span>
-        <span class="view-count" id="results-count"></span>
-      </div>
-      <div class="results-grid" id="results-grid"></div>
-      <div class="load-more hidden" id="results-more-wrap">
-        <button class="btn" id="results-more" type="button">Load more</button>
-      </div>
-      <div class="state hidden" id="results-empty">
-        <p>No results found</p>
-      </div>
-      <div class="state hidden" id="results-loading">
-        <div class="spinner"></div>
-      </div>
-      <div class="state hidden" id="results-error">
-        <p id="results-error-msg">Something went wrong</p>
-        <button class="btn" id="results-retry">Retry</button>
-      </div>
-    </section>
-
-    <section class="view hidden" id="tv-view">
-      <button class="btn-back" id="tv-back">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
-        Back
-      </button>
-      <div class="tv-hero" id="tv-hero">
-        <div class="tv-poster" id="tv-poster"></div>
-        <div class="tv-info">
-          <h2 class="tv-title" id="tv-title"></h2>
-          <p class="tv-overview" id="tv-overview"></p>
-          <div class="season-row">
-            <label class="season-label">Season</label>
-            <div class="season-wrap">
-              <select id="season-select"></select>
-              <svg class="select-chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
-            </div>
-          </div>
-        </div>
-      </div>
-      <div class="episodes-list" id="episodes-list"></div>
-      <div class="state hidden" id="tv-loading">
-        <div class="spinner"></div>
-      </div>
-    </section>
-
-    <section class="view hidden" id="player-view">
-      <button class="btn-back" id="player-back">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
-        Back
-      </button>
-      <div class="player-meta" id="player-meta"></div>
-      <div class="source-row">
-        <span class="source-label">Source:</span>
-        <div class="source-buttons" id="source-buttons"></div>
-        <button class="source-btn player-next hidden" id="player-next" type="button" aria-keyshortcuts="n">
-          Next episode
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 4 15 12 5 20 5 4" fill="currentColor"/><line x1="19" y1="5" x2="19" y2="19"/></svg>
-        </button>
-      </div>
-      <div class="player-wrap">
-        <iframe class="player-iframe" id="player-iframe" allow="autoplay; fullscreen" allowfullscreen></iframe>
-      </div>
-      <div class="player-episodes hidden" id="player-episodes">
-        <div class="season-tabs" id="season-tabs"></div>
-        <div class="episodes-list" id="player-episodes-list"></div>
-      </div>
-    </section>
-
-  </main>
-
-  <script src="/js/app.js?v=94a265f5fe"></script>
+  <script src="/js/app.js?v=63d429659d"></script>
 </body>
 </html>
