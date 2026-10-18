@@ -903,3 +903,60 @@ body.is-streaming .search-fab {
   .card:hover { transform: none; }
   .view.active { animation: none; }
 }
+
+/* ─── CONTINUE WATCHING / LOAD MORE / NEXT ─── */
+
+.continue-row { margin-bottom: 36px; }
+
+.continue-grid {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(140px, 170px);
+  gap: 12px;
+  overflow-x: auto;
+  padding-bottom: 6px;
+  scroll-snap-type: x proximity;
+  scrollbar-width: thin;
+}
+.continue-grid .card { scroll-snap-align: start; }
+
+.card-remove {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: 1px solid var(--border-hover);
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.6);
+  color: var(--text);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+.card:hover .card-remove,
+.card:focus-within .card-remove,
+.card-remove:focus-visible { opacity: 1; }
+@media (hover: none) { .card-remove { opacity: 1; } }
+
+.load-more {
+  display: flex;
+  justify-content: center;
+  margin-top: 28px;
+}
+
+.source-row { flex-wrap: wrap; }
+.player-next {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+  color: var(--text);
+}
+
+/* Pause background motion while the tab is hidden. */
+body.is-hidden .blob { animation-play-state: paused; }

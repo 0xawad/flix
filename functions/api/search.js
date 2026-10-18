@@ -1,4 +1,4 @@
-import { checkApiKey, jsonResponse, tmdbFetch, validateInt } from '../../lib/tmdb.js';
+import { checkApiKey, jsonResponse, tmdbFetch, validateInt, shapes } from '../../lib/tmdb.js';
 
 const MAX_QUERY = 100;
 
@@ -27,9 +27,10 @@ export async function onRequest(context) {
     return jsonResponse({ error: 'Invalid page' }, 400);
   }
 
+  // TMDB search is case-insensitive; lowercasing improves edge-cache hits.
   return tmdbFetch(
-    `/search/multi?query=${encodeURIComponent(query)}&page=${page}&include_adult=false`,
+    `/search/multi?query=${encodeURIComponent(query.toLowerCase())}&page=${page}&include_adult=false`,
     env,
-    { ttl: 600 }
+    { ttl: 600, shape: shapes.list, ctx: context }
   );
 }

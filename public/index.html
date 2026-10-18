@@ -6,7 +6,7 @@
   <title>Flix — Search & Stream</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&family=Righteous&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&family=Righteous&display=swap" rel="stylesheet">
   <link rel="icon" type="image/svg+xml" href="/favicon.svg">
   <link rel="stylesheet" href="/css/style.css">
 </head>
@@ -41,11 +41,20 @@
   <main class="main">
 
     <section class="view" id="results-view">
+      <div class="continue-row hidden" id="continue-row">
+        <div class="view-header">
+          <span class="view-label">Continue watching</span>
+        </div>
+        <div class="continue-grid" id="continue-grid"></div>
+      </div>
       <div class="view-header">
         <span class="view-label" id="results-label">Trending</span>
         <span class="view-count" id="results-count"></span>
       </div>
       <div class="results-grid" id="results-grid"></div>
+      <div class="load-more hidden" id="results-more-wrap">
+        <button class="btn" id="results-more" type="button">Load more</button>
+      </div>
       <div class="state hidden" id="results-empty">
         <p>No results found</p>
       </div>
@@ -92,6 +101,10 @@
       <div class="source-row">
         <span class="source-label">Source:</span>
         <div class="source-buttons" id="source-buttons"></div>
+        <button class="source-btn player-next hidden" id="player-next" type="button" aria-keyshortcuts="n">
+          Next episode
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 4 15 12 5 20 5 4" fill="currentColor"/><line x1="19" y1="5" x2="19" y2="19"/></svg>
+        </button>
       </div>
       <div class="player-wrap">
         <iframe class="player-iframe" id="player-iframe" allow="autoplay; fullscreen" allowfullscreen></iframe>

@@ -18,6 +18,9 @@ A glassy, minimal streaming webapp powered by TMDB metadata and embedded players
 
 - **Search** — TMDB-powered search across 500k+ titles
 - **Smart branching** — Movies play instantly, TV series get season/episode pickers
+- **Continue watching**: picks up the last movie or episode you opened (stored locally)
+- **Next episode**: one click, or press `N`, including across seasons
+- **Shareable links**: every view, down to a single episode, has its own URL
 - **Glassmorphism** — Liquid glass UI with animated blobs and frosted cards
 - **Fast** — Static SPA on Cloudflare's global edge network
 - **Zero ads** — Just your content
@@ -50,6 +53,13 @@ python3 -m http.server 8080 --directory public
 ```
 
 To test the API proxy locally, wrangler will handle the Pages Functions. Make sure `TMDB_API_KEY` is set in your environment or `.dev.vars` file.
+
+```bash
+npm test        # API/middleware tests (node:test, no dependencies)
+npm run check   # syntax-check the client + tests (what CI runs)
+```
+
+See [`flix.md`](flix.md) for the architecture.
 
 ## 🛠 Configuration
 

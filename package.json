@@ -2,5 +2,14 @@
   "name": "flix",
   "version": "1.0.0",
   "private": true,
-  "description": "Searchable streaming web app for movies and TV series"
+  "type": "module",
+  "description": "Searchable streaming web app for movies and TV series",
+  "scripts": {
+    "dev": "wrangler pages dev public",
+    "test": "node --test \"test/**/*.test.js\"",
+    "check": "node --check public/js/app.js && npm test"
+  },
+  "engines": {
+    "node": ">=20"
+  }
 }

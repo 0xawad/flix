@@ -1,4 +1,4 @@
-const IMG_BASE = 'https://image.tmdb.org/t/p/w500';
+const IMG_BASE = 'https://image.tmdb.org/t/p';
 
 const SOURCES = [
   {
@@ -53,6 +53,11 @@ const dom = {
   playerEpisodesList: $('#player-episodes-list'),
   seasonTabs: $('#season-tabs'),
   sourceButtons: $('#source-buttons'),
+  playerNext: $('#player-next'),
+  continueRow: $('#continue-row'),
+  continueGrid: $('#continue-grid'),
+  resultsMoreWrap: $('#results-more-wrap'),
+  resultsMore: $('#results-more'),
 };
 
 let lastQuery = '';
@@ -68,6 +73,10 @@ let currentPlayerId = null;
 let currentPlayerSeason = null;
 let currentPlayerEpisode = null;
 let fallbackTimer = null;
+let currentPlayerPoster = null;
+let searchPage = 1;
+let searchTotalPages = 1;
+const shownKeys = new Set();
 
 function showView(view) {
   $$('.view').forEach((v) => v.classList.remove('active'));
@@ -75,15 +84,23 @@ function showView(view) {
   view.classList.add('active');
 }
 
-function posterUrl(path) {
-  return path ? `${IMG_BASE}${path}` : null;
+function posterUrl(path, size = 'w342') {
+  return path ? `${IMG_BASE}/${size}${path}` : null;
+}
+
+// Grid cards are ~130-250px wide (two columns on phones), so let the browser
+// pick the smallest TMDB size that is sharp at the device's pixel ratio.
+function posterImg(path, alt, { sizes = '(max-width: 600px) 50vw, 200px', eager = false } = {}) {
+  if (!path) return '<div class="no-poster">No poster</div>';
+  const srcset = ['w185 185w', 'w342 342w', 'w500 500w']
+    .map((s) => { const [size, w] = s.split(' '); return `${posterUrl(path, size)} ${w}`; })
+    .join(', ');
+  return `<img src="${posterUrl(path)}" srcset="${srcset}" sizes="${sizes}" alt="${escape(alt)}"`
+    + ` ${eager ? 'fetchpriority="high"' : 'loading="lazy"'} decoding="async">`;
 }
 
 function renderPoster(el, path, alt) {
-  const url = posterUrl(path);
-  el.innerHTML = url
-    ? `<img src="${url}" alt="${escape(alt)}" loading="lazy">`
-    : `<div class="no-poster">No poster</div>`;
+  el.innerHTML = posterImg(path, alt, { sizes: '140px', eager: true });
 }
 
 function escape(str) {
@@ -189,11 +206,14 @@ function handleRoute() {
     if (!id) return goHome();
     if (isActive(dom.playerView) && currentPlayerId === id && currentPlayerSeason == null) return;
     seriesData = null;
+    currentPlayerPoster = null;
     openPlayer(id, 'Loading...', undefined, undefined, true);
     fetchJSON(`/api/movie/${id}`)
       .then((data) => {
         if (currentPlayerId === id && currentPlayerSeason == null) {
           dom.playerMeta.textContent = data.title || 'Untitled';
+          currentPlayerPoster = data.poster_path || null;
+          recordCurrentWatch();
         }
       })
       .catch(() => {});
@@ -243,6 +263,8 @@ async function doSearch(query, { fromRoute = false, force = false } = {}) {
 
   dom.resultsLoading.classList.remove('hidden');
   dom.resultsGrid.innerHTML = '';
+  dom.resultsMoreWrap.classList.add('hidden');
+  renderContinue();
   dom.resultsEmpty.classList.add('hidden');
   dom.resultsError.classList.add('hidden');
   dom.resultsLabel.textContent = `Results for "${query}"`;
@@ -268,8 +290,10 @@ async function loadTrending() {
   dom.resultsCount.textContent = '';
   dom.resultsLoading.classList.remove('hidden');
   dom.resultsGrid.innerHTML = '';
+  dom.resultsMoreWrap.classList.add('hidden');
   dom.resultsEmpty.classList.add('hidden');
   dom.resultsError.classList.add('hidden');
+  renderContinue();
   showView(dom.resultsView);
 
   try {
@@ -285,62 +309,183 @@ async function loadTrending() {
   }
 }
 
-function renderResults(data) {
-  const items = (data.results || []).filter(
-    (r) => r.media_type === 'movie' || r.media_type === 'tv'
-  );
+const PLAY_ICON = '<svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3" fill="currentColor"/></svg>';
+const CLOSE_ICON = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>';
 
-  if (items.length === 0) {
-    dom.resultsEmpty.classList.remove('hidden');
-    dom.resultsCount.textContent = '0';
-    return;
-  }
+function itemKey(item) {
+  return `${item.media_type}:${item.id}`;
+}
 
-  dom.resultsCount.textContent = `${items.length}`;
+// Warm the browser cache (the API sends max-age) so opening a series is instant.
+const prefetched = new Set();
+function prefetchSeries(id) {
+  if (prefetched.has(id)) return;
+  prefetched.add(id);
+  fetch(`/api/tv/${id}`, { priority: 'low' }).catch(() => prefetched.delete(id));
+}
 
-  items.forEach((item) => {
-    const card = document.createElement('div');
-    card.className = 'card';
-    card.tabIndex = 0;
-    card.setAttribute('role', 'button');
+function createCard(item, { eager = false, subtitle, onSelect, onRemove } = {}) {
+  const card = document.createElement('div');
+  card.className = 'card';
+  card.tabIndex = 0;
+  card.setAttribute('role', 'button');
 
-    const title = item.title || item.name || 'Untitled';
-    const year = (item.release_date || item.first_air_date || '').slice(0, 4);
-    const imgUrl = posterUrl(item.poster_path);
-    const isMovie = item.media_type === 'movie';
+  const title = item.title || item.name || 'Untitled';
+  const year = (item.release_date || item.first_air_date || '').slice(0, 4);
+  const isMovie = item.media_type === 'movie';
+  const meta = subtitle ?? year;
 
-    card.setAttribute('aria-label', `Play ${title}${year ? ` (${year})` : ''}`);
-
-    const playIcon = '<svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3" fill="currentColor"/></svg>';
-
-    card.innerHTML = `
-      <div class="card-poster">
-        ${imgUrl ? `<img src="${imgUrl}" alt="${escape(title)}" loading="lazy">` : `<div class="no-poster">No poster</div>`}
-        <div class="card-overlay">
-          <div class="card-play">${playIcon}</div>
-          <div class="card-info">
-            <div class="card-title">${escape(title)}</div>
-            <div class="card-meta">${year}${year ? ' · ' : ''}<span class="card-tag ${isMovie ? 'card-tag--movie' : 'card-tag--tv'}">${isMovie ? 'Movie' : 'TV'}</span></div>
-          </div>
+  card.setAttribute('aria-label', `Play ${title}${meta ? ` (${meta})` : ''}`);
+  card.innerHTML = `
+    <div class="card-poster">
+      ${posterImg(item.poster_path, title, { eager })}
+      <div class="card-overlay">
+        <div class="card-play">${PLAY_ICON}</div>
+        <div class="card-info">
+          <div class="card-title">${escape(title)}</div>
+          <div class="card-meta">${escape(meta)}${meta ? ' · ' : ''}<span class="card-tag ${isMovie ? 'card-tag--movie' : 'card-tag--tv'}">${isMovie ? 'Movie' : 'TV'}</span></div>
         </div>
       </div>
-    `;
+    </div>
+  `;
 
-    card.addEventListener('click', () => handleSelect(item));
-    card.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter' || e.key === ' ') {
-        e.preventDefault();
-        handleSelect(item);
-      }
+  const select = onSelect || (() => handleSelect(item));
+  card.addEventListener('click', select);
+  card.addEventListener('keydown', (e) => {
+    if (e.target !== card) return;
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      select();
+    }
+  });
+  if (!isMovie) {
+    card.addEventListener('pointerenter', () => prefetchSeries(item.id), { once: true });
+    card.addEventListener('focus', () => prefetchSeries(item.id), { once: true });
+  }
+
+  if (onRemove) {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'card-remove';
+    btn.setAttribute('aria-label', `Remove ${title} from Continue watching`);
+    btn.innerHTML = CLOSE_ICON;
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      onRemove();
     });
+    card.appendChild(btn);
+  }
 
-    dom.resultsGrid.appendChild(card);
+  return card;
+}
+
+function renderResults(data, { append = false } = {}) {
+  if (!append) {
+    dom.resultsGrid.innerHTML = '';
+    shownKeys.clear();
+  }
+  const items = (data.results || []).filter(
+    (r) => (r.media_type === 'movie' || r.media_type === 'tv') && !shownKeys.has(itemKey(r))
+  );
+
+  searchPage = data.page || 1;
+  searchTotalPages = data.total_pages || 1;
+  dom.resultsMoreWrap.classList.toggle('hidden', !lastQuery || searchPage >= searchTotalPages);
+
+  const offset = dom.resultsGrid.childElementCount;
+  items.forEach((item, index) => {
+    shownKeys.add(itemKey(item));
+    dom.resultsGrid.appendChild(createCard(item, { eager: offset + index < 6 }));
+  });
+
+  const total = dom.resultsGrid.childElementCount;
+  dom.resultsCount.textContent = `${total}`;
+  dom.resultsEmpty.classList.toggle('hidden', total > 0);
+}
+
+async function loadMoreResults() {
+  const query = lastQuery;
+  if (!query || searchPage >= searchTotalPages) return;
+  dom.resultsMore.disabled = true;
+  dom.resultsMore.textContent = 'Loading...';
+  try {
+    const data = await fetchJSON(`/api/search?q=${encodeURIComponent(query)}&page=${searchPage + 1}`);
+    if (query !== lastQuery) return;
+    renderResults(data, { append: true });
+  } catch (err) {
+    dom.resultsMore.textContent = 'Retry';
+    dom.resultsMore.disabled = false;
+    return;
+  }
+  dom.resultsMore.disabled = false;
+  dom.resultsMore.textContent = 'Load more';
+}
+
+// ─── CONTINUE WATCHING ───
+
+const HISTORY_KEY = 'flix:history';
+const HISTORY_MAX = 20;
+
+function readHistory() {
+  try {
+    const list = JSON.parse(localStorage.getItem(HISTORY_KEY));
+    return Array.isArray(list) ? list.filter((e) => e && toInt(e.id) && (e.media_type === 'movie' || e.media_type === 'tv')) : [];
+  } catch {
+    return [];
+  }
+}
+
+function writeHistory(list) {
+  try {
+    localStorage.setItem(HISTORY_KEY, JSON.stringify(list.slice(0, HISTORY_MAX)));
+  } catch { /* storage full or blocked */ }
+}
+
+// One entry per movie or series, most recent first; a series keeps its latest episode.
+function recordWatch(entry) {
+  const list = readHistory();
+  const key = itemKey(entry);
+  const prev = list.find((e) => itemKey(e) === key) || {};
+  const clean = Object.fromEntries(Object.entries(entry).filter(([, v]) => v != null && v !== ''));
+  writeHistory([{ ...prev, ...clean, ts: Date.now() }, ...list.filter((e) => itemKey(e) !== key)]);
+}
+
+function removeWatch(entry) {
+  writeHistory(readHistory().filter((e) => itemKey(e) !== itemKey(entry)));
+  renderContinue();
+}
+
+function resumeWatch(entry) {
+  if (entry.media_type === 'movie') {
+    seriesData = null;
+    currentPlayerPoster = entry.poster_path || null;
+    openPlayer(entry.id, entry.title || 'Untitled');
+  } else {
+    loadSeries(entry.id, { title: entry.name, season: entry.season, episode: entry.episode });
+  }
+}
+
+function renderContinue() {
+  const list = lastQuery ? [] : readHistory();
+  dom.continueGrid.innerHTML = '';
+  dom.continueRow.classList.toggle('hidden', list.length === 0);
+  list.forEach((entry) => {
+    const subtitle = entry.media_type === 'tv' && entry.season && entry.episode
+      ? `S${entry.season} · E${entry.episode}`
+      : '';
+    dom.continueGrid.appendChild(createCard(entry, {
+      subtitle,
+      onSelect: () => resumeWatch(entry),
+      onRemove: () => removeWatch(entry),
+    }));
   });
 }
 
 function handleSelect(item) {
   const title = item.title || item.name || 'Untitled';
   if (item.media_type === 'movie') {
+    seriesData = null;
+    currentPlayerPoster = item.poster_path || null;
     openPlayer(item.id, title);
   } else {
     loadSeries(item.id, { title });
@@ -541,6 +686,68 @@ function renderActiveSeasonEpisodes(seasonNum, activeEpNum) {
   });
   const activeCard = dom.playerEpisodesList.querySelector('.episode--active');
   if (activeCard) activeCard.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+  updateNextButton();
+}
+
+// ─── NEXT EPISODE ───
+
+// The next episode in this season, else the first episode of the next season
+// (episode is null until that season's list is loaded).
+function nextEpisodeTarget() {
+  if (currentPlayerSeason == null || currentPlayerEpisode == null) return null;
+  const eps = allSeasonEpisodes.get(currentPlayerSeason) || [];
+  const idx = eps.findIndex((e) => e.episode_number === currentPlayerEpisode);
+  if (idx < 0) return null;
+  if (idx + 1 < eps.length) {
+    return { season: currentPlayerSeason, episode: eps[idx + 1].episode_number };
+  }
+  const next = availableSeasons.find((s) => s.season_number > currentPlayerSeason);
+  return next ? { season: next.season_number, episode: null } : null;
+}
+
+function updateNextButton() {
+  dom.playerNext.classList.toggle('hidden', !nextEpisodeTarget());
+}
+
+async function playNextEpisode() {
+  const target = nextEpisodeTarget();
+  if (!target) return;
+  if (target.episode == null) {
+    const id = currentPlayerId;
+    if (!allSeasonEpisodes.has(target.season)) {
+      try {
+        const data = await fetchJSON(`/api/tv/${id}/season/${target.season}`);
+        if (currentPlayerId !== id) return;
+        allSeasonEpisodes.set(target.season, data.episodes || []);
+      } catch { return; }
+    }
+    const first = allSeasonEpisodes.get(target.season)[0];
+    if (!first) return;
+    target.episode = first.episode_number;
+  }
+  switchPlayerEpisode(target.season, target.episode);
+}
+
+function recordCurrentWatch() {
+  if (currentPlayerId == null) return;
+  if (currentPlayerSeason != null && currentPlayerEpisode != null) {
+    recordWatch({
+      media_type: 'tv',
+      id: currentPlayerId,
+      name: seriesData?.name,
+      poster_path: seriesData?.poster_path,
+      season: currentPlayerSeason,
+      episode: currentPlayerEpisode,
+    });
+  } else {
+    const title = dom.playerMeta.textContent;
+    recordWatch({
+      media_type: 'movie',
+      id: currentPlayerId,
+      title: title === 'Loading...' ? null : title,
+      poster_path: currentPlayerPoster,
+    });
+  }
 }
 
 async function switchPlayerSeasonTab(seasonNum) {
@@ -571,6 +778,7 @@ function switchPlayerEpisode(season, epNum) {
   currentPlayerSeason = season;
   currentPlayerEpisode = epNum;
   loadCurrentSource();
+  recordCurrentWatch();
 
   if (season !== activePlayerSeason) {
     activePlayerSeason = season;
@@ -651,6 +859,11 @@ async function openPlayer(id, title, season, episode, fromRoute) {
   currentPlayerEpisode = episode ?? null;
 
   renderSourceButtons();
+  dom.playerNext.classList.add('hidden');
+  loadCurrentSource();
+  if (!fromRoute) updateRoute();
+  recordCurrentWatch();
+  dom.playerBack.focus();
 
   if (season != null && episode != null) {
     dom.playerEpisodes.classList.remove('hidden');
@@ -664,9 +877,13 @@ async function openPlayer(id, title, season, episode, fromRoute) {
     activePlayerSeason = Number(season);
     renderSeasonTabs(activePlayerSeason);
 
-    if (!allSeasonEpisodes.has(activePlayerSeason)) {
+    // Reuse the list the TV view already loaded for this season.
+    if (currentSeasonNum === activePlayerSeason && currentSeasonEpisodes.length) {
+      allSeasonEpisodes.set(activePlayerSeason, currentSeasonEpisodes);
+    } else {
       try {
         const data = await fetchJSON(`/api/tv/${id}/season/${activePlayerSeason}`);
+        if (currentPlayerId !== id || currentPlayerSeason !== season) return;
         allSeasonEpisodes.set(activePlayerSeason, data.episodes || []);
       } catch { /* empty */ }
     }
@@ -675,10 +892,6 @@ async function openPlayer(id, title, season, episode, fromRoute) {
   } else {
     dom.playerEpisodes.classList.add('hidden');
   }
-
-  loadCurrentSource();
-  if (!fromRoute) updateRoute();
-  dom.playerBack.focus();
 }
 
 function onPlayerLoad() {
@@ -745,6 +958,7 @@ function closeTv(silent) {
 function showResultsView() {
   showView(dom.resultsView);
   if (!lastQuery && dom.resultsGrid.childElementCount === 0) loadTrending();
+  else renderContinue();
   (dom.resultsGrid.querySelector('.card') || dom.searchFab).focus();
 }
 
@@ -782,6 +996,13 @@ dom.resultsRetry.addEventListener('click', () => {
   else loadTrending();
 });
 
+dom.resultsMore.addEventListener('click', loadMoreResults);
+dom.playerNext.addEventListener('click', playNextEpisode);
+
+document.addEventListener('visibilitychange', () => {
+  document.body.classList.toggle('is-hidden', document.hidden);
+});
+
 dom.tvBack.addEventListener('click', () => closeTv());
 dom.playerBack.addEventListener('click', () => closePlayer());
 
@@ -799,6 +1020,10 @@ document.addEventListener('keydown', (e) => {
     } else if (dom.tvView.classList.contains('active')) {
       closeTv();
     }
+  }
+  const typing = e.target instanceof HTMLInputElement || e.target instanceof HTMLSelectElement;
+  if (e.key === 'n' && !typing && !e.ctrlKey && !e.metaKey && !e.altKey && isActive(dom.playerView)) {
+    playNextEpisode();
   }
   if (e.key === '/' && !dom.searchBar.classList.contains('is-active') && !dom.playerView.classList.contains('active')) {
     e.preventDefault();

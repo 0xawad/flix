@@ -1,4 +1,4 @@
-import { checkApiKey, jsonResponse, tmdbFetch, validateInt } from '../../../lib/tmdb.js';
+import { checkApiKey, jsonResponse, tmdbFetch, validateInt, shapes } from '../../../lib/tmdb.js';
 
 export async function onRequest(context) {
   const { env, params } = context;
@@ -11,5 +11,5 @@ export async function onRequest(context) {
     return jsonResponse({ error: 'Invalid movie ID' }, 400);
   }
 
-  return tmdbFetch(`/movie/${id}`, env, { ttl: 21600 });
+  return tmdbFetch(`/movie/${id}`, env, { ttl: 21600, shape: shapes.movie, ctx: context });
 }
