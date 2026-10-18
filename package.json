@@ -5,7 +5,7 @@
   "type": "module",
   "description": "Searchable streaming web app for movies and TV series",
   "scripts": {
-    "dev": "wrangler pages dev public",
+    "dev": "npx wrangler@4 pages dev public",
     "test": "node --test \"test/**/*.test.js\"",
     "version-assets": "node scripts/asset-version.js --write",
     "check": "node --check public/js/app.js && node scripts/asset-version.js && npm test"
