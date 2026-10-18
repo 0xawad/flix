@@ -41,7 +41,11 @@ Errors are always JSON: `400` for invalid input, `404` for unknown routes or tit
 2. Rejects cross-site browser requests, based on `Sec-Fetch-Site` and `Origin`.
 3. Rate-limits per client IP: 30/min for search, 120/min for everything else. It uses the `RATE_LIMITER` binding if one is bound, and otherwise a best-effort in-isolate counter. A Cloudflare WAF rate-limiting rule on `/api/` is the real backstop.
 4. Converts the SPA fallback (HTML) into a JSON 404 and catches thrown errors as a JSON 500.
-5. Adds `CSP: default-src 'none'`, `nosniff`, `no-referrer` and CORP, with `no-store` on non-200 responses.
+5. If Turnstile is configured, requires a valid session cookie on every route except `POST /api/session`. Requests without one get `401 { challenge: <site key> }`.
+6. Adds `CSP: default-src 'none'`, `nosniff`, `no-referrer` and CORP, with `no-store` on non-200 responses.
+
+### Turnstile sessions (`lib/session.js`, `functions/api/session.js`)
+On a `401` with `challenge`, the client loads Turnstile, renders the widget in an overlay, and POSTs the token to `/api/session`. The server checks it with Turnstile's `siteverify` and sets `flix_s=<exp>.<HMAC>` (HttpOnly, Secure, SameSite=Strict, `Path=/api`, 12 h). After that, the client retries the original request. Enforcement is off unless both `TURNSTILE_SITE_KEY` and `TURNSTILE_SECRET_KEY` are set. The HMAC key comes from `SESSION_SECRET` if set, and otherwise from the Turnstile secret.
 
 ### TMDB auth (`lib/tmdb.js`)
 `TMDB_API_KEY` can be a v4 Read Access Token (a JWT, sent as `Authorization: Bearer`) or a legacy v3 key (sent as `?api_key=`). The key never reaches the client or the cache keys.
@@ -75,7 +79,7 @@ The zone sends static files with a long browser `max-age`. So `index.html` loads
 ## Deploy
 Pushing to `main` deploys to production on Cloudflare Pages. Other branches get preview deployments. CI (`.github/workflows/ci.yml`) syntax-checks the client and runs `npm test` on every push and PR.
 
-Required environment variable: `TMDB_API_KEY`. Optional binding: `RATE_LIMITER`.
+Required environment variable: `TMDB_API_KEY`. Optional: `TURNSTILE_SITE_KEY` + `TURNSTILE_SECRET_KEY`, `SESSION_SECRET`, and the `RATE_LIMITER` binding.
 
 ## Not done yet
 - Self-hosted fonts.

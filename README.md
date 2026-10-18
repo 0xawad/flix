@@ -68,7 +68,17 @@ See [`flix.md`](flix.md) for the architecture.
 |----------|----------|-------------|
 | `TMDB_API_KEY` | ✅ | TMDB API Read Access Token (v4 JWT, sent as a Bearer header). A legacy v3 API key also works. |
 
-Both are on [TMDB → Settings → API](https://www.themoviedb.org/settings/api).
+| `TURNSTILE_SITE_KEY` | optional | Turnstile widget site key. Set it together with the secret to require a human check before using the API. |
+| `TURNSTILE_SECRET_KEY` | optional | Turnstile widget secret key, stored as an encrypted variable |
+
+Both TMDB credentials are on [TMDB → Settings → API](https://www.themoviedb.org/settings/api).
+
+### Turnstile (optional bot protection)
+
+1. In Cloudflare, go to **Turnstile → Add widget**. Set the hostname to your domain (e.g. `flix.awad.lol`) and the mode to **Managed**.
+2. In the Pages project's **Settings → Variables and Secrets**, add `TURNSTILE_SITE_KEY` and `TURNSTILE_SECRET_KEY` (encrypt the secret), then redeploy.
+
+Once both are set, the first API call from a browser shows a short check (usually invisible). Passing it sets an HttpOnly session cookie for 12 hours. Requests without that cookie get `401`, so scripts can't use your TMDB quota. Without the variables, nothing changes.
 
 ## 🛡 API hardening
 

@@ -23,6 +23,8 @@ const $$ = (s) => document.querySelectorAll(s);
 
 const dom = {
   searchFab: $('#search-fab'),
+  verifyOverlay: $('#verify-overlay'),
+  verifyWidget: $('#verify-widget'),
   searchBar: $('#search-bar'),
   searchBackdrop: $('#search-backdrop'),
   searchInput: $('#search-input'),
@@ -112,11 +114,62 @@ function escape(str) {
     .replace(/'/g, '&#39;');
 }
 
-async function fetchJSON(url) {
+async function fetchJSON(url, { retried = false } = {}) {
   const res = await fetch(url);
   const data = await res.json();
+  if (res.status === 401 && data.challenge && !retried) {
+    await ensureVerified(data.challenge);
+    return fetchJSON(url, { retried: true });
+  }
   if (!res.ok) throw new Error(data.error || data.status_message || `Request failed (${res.status})`);
   return data;
+}
+
+// ─── TURNSTILE ───
+
+// One challenge at a time: parallel requests that all get a 401 share it.
+let verifying = null;
+let turnstileScript = null;
+
+function loadTurnstile() {
+  turnstileScript ??= new Promise((resolve, reject) => {
+    const s = document.createElement('script');
+    s.src = 'https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit';
+    s.async = true;
+    s.onload = () => resolve(window.turnstile);
+    s.onerror = () => { turnstileScript = null; reject(new Error('Could not load the verification check')); };
+    document.head.appendChild(s);
+  });
+  return turnstileScript;
+}
+
+function ensureVerified(siteKey) {
+  verifying ??= (async () => {
+    const turnstile = await loadTurnstile();
+    dom.verifyOverlay.classList.remove('hidden');
+    try {
+      const token = await new Promise((resolve, reject) => {
+        dom.verifyWidget.innerHTML = '';
+        turnstile.render(dom.verifyWidget, {
+          sitekey: siteKey,
+          theme: 'dark',
+          callback: resolve,
+          'error-callback': () => reject(new Error('Verification failed, please reload')),
+          'expired-callback': () => reject(new Error('Verification expired, please retry')),
+        });
+      });
+      const res = await fetch('/api/session', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ token }),
+      });
+      if (!res.ok) throw new Error('Verification failed, please reload');
+    } finally {
+      dom.verifyOverlay.classList.add('hidden');
+      dom.verifyWidget.innerHTML = '';
+    }
+  })().finally(() => { verifying = null; });
+  return verifying;
 }
 
 function isActive(view) {

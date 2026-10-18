@@ -1,4 +1,5 @@
 import { jsonResponse } from '../../lib/tmdb.js';
+import { hasValidSession, turnstileEnabled } from '../../lib/session.js';
 
 // Runs in front of every /api/* request (including paths with no route).
 
@@ -11,7 +12,7 @@ const SECURITY_HEADERS = {
 };
 
 // Requests per client per minute. Search is the expensive, scriptable one.
-const LIMITS = { search: 30, default: 120 };
+const LIMITS = { search: 30, session: 10, default: 120 };
 const WINDOW_MS = 60_000;
 
 // Best-effort fallback limiter, per isolate. Many isolates serve the site, so
@@ -67,8 +68,10 @@ export async function onRequest(context) {
   const { request, env } = context;
   const url = new URL(request.url);
 
-  if (request.method !== 'GET' && request.method !== 'HEAD') {
-    return withHeaders(jsonResponse({ error: 'Method not allowed' }, 405), { allow: 'GET, HEAD' });
+  const isSession = url.pathname === '/api/session';
+  const methods = isSession ? ['POST'] : ['GET', 'HEAD'];
+  if (!methods.includes(request.method)) {
+    return withHeaders(jsonResponse({ error: 'Method not allowed' }, 405), { allow: methods.join(', ') });
   }
 
   if (isCrossSite(request, url)) {
@@ -76,9 +79,15 @@ export async function onRequest(context) {
   }
 
   const ip = request.headers.get('cf-connecting-ip') || 'unknown';
-  const bucket = url.pathname === '/api/search' ? 'search' : 'default';
+  const bucket = isSession ? 'session' : url.pathname === '/api/search' ? 'search' : 'default';
   if (!(await allowed(env, ip, bucket))) {
     return withHeaders(jsonResponse({ error: 'Too many requests' }, 429), { 'retry-after': '60' });
+  }
+
+  // With Turnstile configured, every data route needs a session cookie. The
+  // 401 carries the public site key so the client can render the challenge.
+  if (!isSession && turnstileEnabled(env) && !(await hasValidSession(request, env))) {
+    return withHeaders(jsonResponse({ error: 'Verification required', challenge: env.TURNSTILE_SITE_KEY }, 401));
   }
 
   let response;
