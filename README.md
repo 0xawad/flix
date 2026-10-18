@@ -56,7 +56,8 @@ To test the API proxy locally, wrangler will handle the Pages Functions. Make su
 
 ```bash
 npm test        # API/middleware tests (node:test, no dependencies)
-npm run check   # syntax-check the client + tests (what CI runs)
+npm run check   # syntax-check, asset-version check, and tests (what CI runs)
+npm run version-assets  # run after editing public/css or public/js
 ```
 
 See [`flix.md`](flix.md) for the architecture.

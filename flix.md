@@ -69,12 +69,15 @@ Hash routes, written with `history.pushState`/`replaceState` and read on `popsta
 ### Continue watching
 Stored in `localStorage` under `flix:history`. It keeps up to 20 entries, one per movie or series, and a series remembers its latest episode. It's per browser, and nothing is sent to the server.
 
+## Asset versioning
+The zone sends static files with a long browser `max-age`. So `index.html` loads `style.css?v=<hash>` and `app.js?v=<hash>`, where the hash covers the file's contents. After changing CSS or JS, run `npm run version-assets`. CI (`npm run check`) fails if a version is out of date.
+
 ## Deploy
 Pushing to `main` deploys to production on Cloudflare Pages. Other branches get preview deployments. CI (`.github/workflows/ci.yml`) syntax-checks the client and runs `npm test` on every push and PR.
 
 Required environment variable: `TMDB_API_KEY`. Optional binding: `RATE_LIMITER`.
 
 ## Not done yet
-- Self-hosted fonts and hashed asset filenames, which would allow `immutable` caching.
+- Self-hosted fonts.
 - Splitting `app.js` into ES modules.
 - Per-source iframe sandbox and referrer tuning, which needs testing against each embed.
