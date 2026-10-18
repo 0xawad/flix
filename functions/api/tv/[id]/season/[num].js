@@ -1,4 +1,4 @@
-import { checkApiKey, jsonResponse, tmdbFetch, validateInt } from '../../../_middleware.js';
+import { checkApiKey, jsonResponse, tmdbFetch, validateInt } from '../../../../../lib/tmdb.js';
 
 export async function onRequest(context) {
   const { env, params } = context;
@@ -7,10 +7,10 @@ export async function onRequest(context) {
   if (keyErr) return keyErr;
 
   const id = validateInt(params.id);
-  const num = validateInt(params.num);
+  const num = validateInt(params.num, 500);
   if (!id || !num) {
     return jsonResponse({ error: 'Invalid series ID or season number' }, 400);
   }
 
-  return tmdbFetch(`/tv/${id}/season/${num}?api_key=${env.TMDB_API_KEY}`);
+  return tmdbFetch(`/tv/${id}/season/${num}`, env, { ttl: 21600 });
 }

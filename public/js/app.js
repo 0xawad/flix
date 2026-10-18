@@ -87,9 +87,12 @@ function renderPoster(el, path, alt) {
 }
 
 function escape(str) {
-  const d = document.createElement('div');
-  d.textContent = str;
-  return d.innerHTML;
+  return String(str ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
 }
 
 async function fetchJSON(url) {
@@ -99,26 +102,46 @@ async function fetchJSON(url) {
   return data;
 }
 
-function updateRoute() {
-  if (dom.playerView.classList.contains('active')) {
-    if (seriesData && currentSeasonNum != null) {
-      const ep = currentSeasonEpisodes.find((e) => e.episode_number != null && dom.playerMeta.textContent.includes(e.name || `Episode ${e.episode_number}`));
-      const epNum = ep ? ep.episode_number : currentSeasonNum;
-      location.hash = `#/tv/${seriesData.id}/watch/${currentSeasonNum}/${epNum}`;
-    } else {
-      location.hash = `#/movie/${seriesData ? seriesData.id : 'unknown'}/watch`;
+function isActive(view) {
+  return view.classList.contains('active');
+}
+
+function toInt(val) {
+  const n = Number(val);
+  return Number.isInteger(n) && n > 0 ? n : null;
+}
+
+// Builds the hash for the current state. The player's own ids are the source
+// of truth, so movies and episodes always produce a correct, shareable URL.
+function currentRoute() {
+  if (isActive(dom.playerView) && currentPlayerId != null) {
+    if (currentPlayerSeason != null && currentPlayerEpisode != null) {
+      return `#/tv/${currentPlayerId}/watch/${currentPlayerSeason}/${currentPlayerEpisode}`;
     }
-  } else if (dom.tvView.classList.contains('active') && seriesData) {
-    if (currentSeasonNum != null) {
-      location.hash = `#/tv/${seriesData.id}/season/${currentSeasonNum}`;
-    } else {
-      location.hash = `#/tv/${seriesData.id}`;
-    }
-  } else if (dom.resultsView.classList.contains('active') && lastQuery) {
-    location.hash = `#/search/${encodeURIComponent(lastQuery)}`;
-  } else {
-    location.hash = '#/';
+    return `#/movie/${currentPlayerId}/watch`;
   }
+  if (isActive(dom.tvView) && seriesData) {
+    return currentSeasonNum != null
+      ? `#/tv/${seriesData.id}/season/${currentSeasonNum}`
+      : `#/tv/${seriesData.id}`;
+  }
+  if (isActive(dom.resultsView) && lastQuery) {
+    return `#/search/${encodeURIComponent(lastQuery)}`;
+  }
+  return '#/';
+}
+
+// pushState/replaceState don't fire `hashchange`, so updating the URL after an
+// in-app navigation no longer re-runs handleRoute (which double-loaded the
+// player). Back/forward still fire `hashchange` and go through handleRoute.
+function updateRoute({ replace = false } = {}) {
+  const hash = currentRoute();
+  if (location.hash === hash) return;
+  history[replace ? 'replaceState' : 'pushState'](null, '', hash);
+}
+
+function leavePlayer() {
+  if (isActive(dom.playerView)) closePlayer(true);
 }
 
 function handleRoute() {
@@ -127,49 +150,69 @@ function handleRoute() {
 
   if (parts[0] === 'search' && parts[1]) {
     const query = decodeURIComponent(parts.slice(1).join('/'));
-    if (query && query !== lastQuery) {
-      dom.searchInput.value = query;
-      doSearch(query, true);
-    }
-  } else if (parts[0] === 'tv' && parts[1]) {
-    const id = Number(parts[1]);
-    if (!id) return;
-    if (parts[2] === 'watch' && parts[3] && parts[4]) {
-      const season = Number(parts[3]);
-      const episode = Number(parts[4]);
-      if (seriesData && seriesData.id === id && currentSeasonNum === season) {
-        openPlayer(id, dom.playerMeta.textContent, season, episode, true);
-      } else {
-        openTvAndWatch(id, season, episode);
-      }
-    } else if (parts[2] === 'season' && parts[3]) {
-      const season = Number(parts[3]);
-      if (seriesData && seriesData.id === id) {
-        if (currentSeasonNum !== season) {
-          dom.seasonSelect.value = season;
-          loadEpisodes(id, season);
-        }
-      } else {
-        openTvAndSeason(id, season);
-      }
-    } else {
-      if (!seriesData || seriesData.id !== id) {
-        openTv(id, 'Loading...', true);
-      }
-    }
-  } else if (parts[0] === 'movie' && parts[1] && parts[2] === 'watch') {
-    const id = Number(parts[1]);
-    if (!id) return;
-    if (dom.playerView.classList.contains('active') && seriesData && seriesData.id === id) return;
-    openPlayer(id, dom.playerMeta.textContent || 'Loading...', undefined, undefined, true);
-  } else {
-    if (dom.resultsView.classList.contains('active') && !lastQuery) return;
-    if (dom.tvView.classList.contains('active') || dom.playerView.classList.contains('active')) {
-      closeTv(true);
-      closePlayer(true);
-    }
-    if (!lastQuery) loadTrending();
+    leavePlayer();
+    if (seriesData) closeTv(true);
+    dom.searchInput.value = query;
+    if (query === lastQuery) showView(dom.resultsView);
+    else doSearch(query, { fromRoute: true });
+    return;
   }
+
+  if (parts[0] === 'tv') {
+    const id = toInt(parts[1]);
+    if (!id) return goHome();
+
+    if (parts[2] === 'watch') {
+      const season = toInt(parts[3]);
+      const episode = toInt(parts[4]);
+      if (!season || !episode) return loadSeries(id, { fromRoute: true });
+      if (isActive(dom.playerView) && currentPlayerId === id
+        && currentPlayerSeason === season && currentPlayerEpisode === episode) return;
+      return loadSeries(id, { season, episode, fromRoute: true });
+    }
+
+    leavePlayer();
+    const season = parts[2] === 'season' ? toInt(parts[3]) : null;
+    if (seriesData && seriesData.id === id) {
+      showView(dom.tvView);
+      if (season && currentSeasonNum !== season) {
+        dom.seasonSelect.value = season;
+        loadEpisodes(id, season);
+      }
+      return;
+    }
+    return loadSeries(id, { season, fromRoute: true });
+  }
+
+  if (parts[0] === 'movie' && parts[2] === 'watch') {
+    const id = toInt(parts[1]);
+    if (!id) return goHome();
+    if (isActive(dom.playerView) && currentPlayerId === id && currentPlayerSeason == null) return;
+    seriesData = null;
+    openPlayer(id, 'Loading...', undefined, undefined, true);
+    fetchJSON(`/api/movie/${id}`)
+      .then((data) => {
+        if (currentPlayerId === id && currentPlayerSeason == null) {
+          dom.playerMeta.textContent = data.title || 'Untitled';
+        }
+      })
+      .catch(() => {});
+    return;
+  }
+
+  goHome();
+}
+
+function goHome() {
+  leavePlayer();
+  if (seriesData) closeTv(true);
+  if (lastQuery || !isActive(dom.resultsView) || dom.resultsGrid.childElementCount === 0) {
+    lastQuery = '';
+    dom.searchInput.value = '';
+    dom.searchClear.classList.add('hidden');
+    loadTrending();
+  }
+  updateRoute({ replace: true });
 }
 
 // ─── SEARCH BAR ───
@@ -187,10 +230,11 @@ function closeSearch() {
   dom.searchFab.classList.remove('is-hidden');
 }
 
-async function doSearch(query, fromRoute) {
-  query = query.trim();
-  if (!query || query === lastQuery) return;
+async function doSearch(query, { fromRoute = false, force = false } = {}) {
+  query = query.trim().slice(0, 100);
+  if (!query || (query === lastQuery && !force)) return;
   closeSearch();
+  leavePlayer();
   lastQuery = query;
   seriesData = null;
   currentSeasonEpisodes = [];
@@ -208,9 +252,11 @@ async function doSearch(query, fromRoute) {
 
   try {
     const data = await fetchJSON(`/api/search?q=${encodeURIComponent(query)}`);
+    if (query !== lastQuery) return;
     dom.resultsLoading.classList.add('hidden');
     renderResults(data);
   } catch (err) {
+    if (query !== lastQuery) return;
     dom.resultsLoading.classList.add('hidden');
     dom.resultsError.classList.remove('hidden');
     dom.resultsErrorMsg.textContent = err.message;
@@ -225,15 +271,17 @@ async function loadTrending() {
   dom.resultsEmpty.classList.add('hidden');
   dom.resultsError.classList.add('hidden');
   showView(dom.resultsView);
-  if (!lastQuery) updateRoute();
 
   try {
     const data = await fetchJSON('/api/trending');
+    if (lastQuery) return;
     dom.resultsLoading.classList.add('hidden');
     renderResults(data);
   } catch (err) {
+    if (lastQuery) return;
     dom.resultsLoading.classList.add('hidden');
-    renderResults({ results: [] });
+    dom.resultsError.classList.remove('hidden');
+    dom.resultsErrorMsg.textContent = err.message;
   }
 }
 
@@ -295,29 +343,43 @@ function handleSelect(item) {
   if (item.media_type === 'movie') {
     openPlayer(item.id, title);
   } else {
-    openTv(item.id, title);
+    loadSeries(item.id, { title });
   }
 }
 
-async function openTv(id, title, fromRoute) {
+let seriesLoadGeneration = 0;
+
+// Single loader for the TV view, used both by clicks and by deep links.
+// With `episode` set it continues straight into the player.
+async function loadSeries(id, { title, season, episode, fromRoute = false } = {}) {
+  const gen = ++seriesLoadGeneration;
+  leavePlayer();
+  seriesData = null;
+  currentSeasonEpisodes = [];
+  currentSeasonNum = null;
   dom.tvLoading.classList.remove('hidden');
   dom.episodesList.innerHTML = '';
   dom.seasonSelect.innerHTML = '<option value="">Loading...</option>';
+  dom.tvTitle.textContent = title || '';
+  dom.tvOverview.textContent = '';
+  dom.tvPoster.innerHTML = '';
   showView(dom.tvView);
 
   try {
     const data = await fetchJSON(`/api/tv/${id}`);
+    if (gen !== seriesLoadGeneration) return;
     seriesData = data;
 
-    renderPoster(dom.tvPoster, data.poster_path, title);
-    dom.tvTitle.textContent = title;
+    const name = data.name || title || 'Untitled';
+    renderPoster(dom.tvPoster, data.poster_path, name);
+    dom.tvTitle.textContent = name;
     dom.tvOverview.textContent = data.overview || '';
 
-    dom.seasonSelect.innerHTML = '';
     const seasons = (data.seasons || []).filter((s) => s.season_number > 0);
+    dom.seasonSelect.innerHTML = '';
+    dom.tvLoading.classList.add('hidden');
 
     if (seasons.length === 0) {
-      dom.tvLoading.classList.add('hidden');
       dom.episodesList.innerHTML = `
         <div class="state state--full">
           <p>No seasons available.</p>
@@ -334,98 +396,25 @@ async function openTv(id, title, fromRoute) {
       dom.seasonSelect.appendChild(opt);
     });
 
-    dom.tvLoading.classList.add('hidden');
-
-    dom.seasonSelect.value = seasons[0].season_number;
-    loadEpisodes(id, seasons[0].season_number);
+    const target = seasons.some((s) => s.season_number === season) ? season : seasons[0].season_number;
+    dom.seasonSelect.value = target;
+    const loading = loadEpisodes(id, target);
     if (!fromRoute) updateRoute();
+
+    if (episode != null) {
+      await loading;
+      if (gen !== seriesLoadGeneration) return;
+      const ep = currentSeasonEpisodes.find((e) => e.episode_number === episode);
+      openPlayer(id, `${name} — ${ep?.name || `Episode ${episode}`}`, target, episode, true);
+      updateRoute({ replace: true });
+      return;
+    }
+    if (fromRoute) updateRoute({ replace: true });
     dom.tvBack.focus();
   } catch (err) {
+    if (gen !== seriesLoadGeneration) return;
     dom.tvLoading.classList.add('hidden');
-    dom.episodesList.innerHTML = `
-      <div class="state state--full">
-        <p>${escape(err.message)}</p>
-      </div>`;
-  }
-}
-
-async function openTvAndSeason(id, season) {
-  dom.tvLoading.classList.remove('hidden');
-  dom.episodesList.innerHTML = '';
-  dom.seasonSelect.innerHTML = '<option value="">Loading...</option>';
-  showView(dom.tvView);
-
-  try {
-    const data = await fetchJSON(`/api/tv/${id}`);
-    seriesData = data;
-
-    dom.tvTitle.textContent = data.name || 'Untitled';
-    dom.tvOverview.textContent = data.overview || '';
-
-    const seasons = (data.seasons || []).filter((s) => s.season_number > 0);
     dom.seasonSelect.innerHTML = '';
-    seasons.forEach((s) => {
-      const opt = document.createElement('option');
-      opt.value = s.season_number;
-      opt.textContent = `${s.name} (${s.episode_count} eps)`;
-      dom.seasonSelect.appendChild(opt);
-    });
-
-    renderPoster(dom.tvPoster, data.poster_path, data.name || 'Untitled');
-
-    dom.tvLoading.classList.add('hidden');
-
-    const targetSeason = seasons.find((s) => s.season_number === season) ? season : seasons[0]?.season_number;
-    if (targetSeason != null) {
-      dom.seasonSelect.value = targetSeason;
-      loadEpisodes(id, targetSeason);
-    }
-    dom.tvBack.focus();
-  } catch (err) {
-    dom.tvLoading.classList.add('hidden');
-    dom.episodesList.innerHTML = `
-      <div class="state state--full">
-        <p>${escape(err.message)}</p>
-      </div>`;
-  }
-}
-
-async function openTvAndWatch(id, season, episode) {
-  dom.tvLoading.classList.remove('hidden');
-  dom.episodesList.innerHTML = '';
-  dom.seasonSelect.innerHTML = '<option value="">Loading...</option>';
-  showView(dom.tvView);
-
-  try {
-    const data = await fetchJSON(`/api/tv/${id}`);
-    seriesData = data;
-
-    dom.tvTitle.textContent = data.name || 'Untitled';
-    dom.tvOverview.textContent = data.overview || '';
-
-    const seasons = (data.seasons || []).filter((s) => s.season_number > 0);
-    dom.seasonSelect.innerHTML = '';
-    seasons.forEach((s) => {
-      const opt = document.createElement('option');
-      opt.value = s.season_number;
-      opt.textContent = `${s.name} (${s.episode_count} eps)`;
-      dom.seasonSelect.appendChild(opt);
-    });
-
-    renderPoster(dom.tvPoster, data.poster_path, data.name || 'Untitled');
-
-    dom.tvLoading.classList.add('hidden');
-
-    const targetSeason = seasons.find((s) => s.season_number === season) ? season : seasons[0]?.season_number;
-    if (targetSeason != null) {
-      dom.seasonSelect.value = targetSeason;
-      await loadEpisodes(id, targetSeason);
-    }
-
-    const epName = currentSeasonEpisodes.find((e) => e.episode_number === episode)?.name || `Episode ${episode}`;
-    openPlayer(id, `${data.name} — ${epName}`, season, episode, true);
-  } catch (err) {
-    dom.tvLoading.classList.add('hidden');
     dom.episodesList.innerHTML = `
       <div class="state state--full">
         <p>${escape(err.message)}</p>
@@ -434,6 +423,7 @@ async function openTvAndWatch(id, season, episode) {
 }
 
 async function loadEpisodes(seriesId, seasonNum) {
+  seasonNum = Number(seasonNum);
   const gen = ++seasonLoadGeneration;
   currentSeasonEpisodes = [];
   currentSeasonNum = null;
@@ -449,6 +439,7 @@ async function loadEpisodes(seriesId, seasonNum) {
     const episodes = data.episodes || [];
     currentSeasonEpisodes = episodes;
     currentSeasonNum = seasonNum;
+    if (isActive(dom.tvView)) updateRoute({ replace: true });
 
     if (episodes.length === 0) {
       dom.episodesList.innerHTML = `
@@ -586,7 +577,7 @@ function switchPlayerEpisode(season, epNum) {
     renderSeasonTabs(season);
   }
   renderActiveSeasonEpisodes(season, epNum);
-  updateRoute();
+  updateRoute({ replace: true });
 }
 
 function renderSourceButtons() {
@@ -634,9 +625,9 @@ function loadCurrentSource() {
   }
 
   if (isTv) {
-    dom.playerIframe.src = src.tv(currentPlayerId, currentPlayerSeason, currentPlayerEpisode);
+    setPlayerSrc(src.tv(currentPlayerId, currentPlayerSeason, currentPlayerEpisode));
   } else {
-    dom.playerIframe.src = src.movie(currentPlayerId);
+    setPlayerSrc(src.movie(currentPlayerId));
   }
 
   fallbackTimer = setTimeout(() => {
@@ -651,7 +642,7 @@ function loadCurrentSource() {
 
 async function openPlayer(id, title, season, episode, fromRoute) {
   dom.playerMeta.textContent = title;
-  dom.playerIframe.src = '';
+  setPlayerSrc(null);
   document.body.classList.add('is-streaming');
   showView(dom.playerView);
 
@@ -690,11 +681,11 @@ async function openPlayer(id, title, season, episode, fromRoute) {
   dom.playerBack.focus();
 }
 
-dom.playerIframe.addEventListener('load', () => {
+function onPlayerLoad() {
   clearTimeout(fallbackTimer);
-});
+}
 
-dom.playerIframe.addEventListener('error', () => {
+function onPlayerError() {
   clearTimeout(fallbackTimer);
   const n = nextSource();
   if (n >= 0) {
@@ -702,11 +693,25 @@ dom.playerIframe.addEventListener('error', () => {
     renderSourceButtons();
     loadCurrentSource();
   }
-});
+}
+
+// Changing an existing iframe's src adds a browser-history entry, so Back
+// would step the embed back instead of leaving the player. A freshly inserted
+// iframe's first navigation adds no entry, so swap in a new element per load.
+function setPlayerSrc(url) {
+  const old = dom.playerIframe;
+  const frame = old.cloneNode(false);
+  frame.removeAttribute('src');
+  if (url) frame.src = url;
+  frame.addEventListener('load', onPlayerLoad);
+  frame.addEventListener('error', onPlayerError);
+  old.replaceWith(frame);
+  dom.playerIframe = frame;
+}
 
 function closePlayer(silent) {
   document.body.classList.remove('is-streaming');
-  dom.playerIframe.src = '';
+  setPlayerSrc(null);
   dom.playerEpisodes.classList.add('hidden');
   allSeasonEpisodes.clear();
   availableSeasons = [];
@@ -721,8 +726,7 @@ function closePlayer(silent) {
     showView(dom.tvView);
     dom.tvBack.focus();
   } else {
-    showView(dom.resultsView);
-    dom.resultsGrid.focus();
+    showResultsView();
   }
   if (!silent) updateRoute();
 }
@@ -733,8 +737,15 @@ function closeTv(silent) {
   currentSeasonNum = null;
   dom.seasonSelect.innerHTML = '';
   dom.episodesList.innerHTML = '';
-  showView(dom.resultsView);
+  showResultsView();
   if (!silent) updateRoute();
+}
+
+// Returning from a deep-linked title leaves an empty grid behind; fill it.
+function showResultsView() {
+  showView(dom.resultsView);
+  if (!lastQuery && dom.resultsGrid.childElementCount === 0) loadTrending();
+  (dom.resultsGrid.querySelector('.card') || dom.searchFab).focus();
 }
 
 // ─── EVENT BINDING ───
@@ -763,21 +774,20 @@ dom.searchClear.addEventListener('click', () => {
   dom.searchClear.classList.add('hidden');
   lastQuery = '';
   loadTrending();
+  updateRoute();
 });
 
 dom.resultsRetry.addEventListener('click', () => {
-  if (lastQuery) doSearch(lastQuery);
+  if (lastQuery) doSearch(lastQuery, { force: true });
+  else loadTrending();
 });
 
-dom.tvBack.addEventListener('click', closeTv);
-dom.playerBack.addEventListener('click', closePlayer);
+dom.tvBack.addEventListener('click', () => closeTv());
+dom.playerBack.addEventListener('click', () => closePlayer());
 
 dom.seasonSelect.addEventListener('change', () => {
-  const num = dom.seasonSelect.value;
-  if (num && seriesData) {
-    loadEpisodes(seriesData.id, num);
-    updateRoute();
-  }
+  const num = toInt(dom.seasonSelect.value);
+  if (num && seriesData) loadEpisodes(seriesData.id, num);
 });
 
 document.addEventListener('keydown', (e) => {
@@ -796,12 +806,10 @@ document.addEventListener('keydown', (e) => {
   }
 });
 
-window.addEventListener('hashchange', handleRoute);
+// popstate covers back/forward and manually edited hashes; listening to
+// hashchange as well would run handleRoute twice per navigation.
+window.addEventListener('popstate', handleRoute);
 
 // ─── INIT ───
 
-if (location.hash && location.hash !== '#/') {
-  handleRoute();
-} else {
-  loadTrending();
-}
+handleRoute();

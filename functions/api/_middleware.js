@@ -1,42 +1,99 @@
-const TMDB_BASE = 'https://api.themoviedb.org/3';
+import { jsonResponse } from '../../lib/tmdb.js';
 
-export function validateInt(val) {
-  const n = Number(val);
-  return Number.isInteger(n) && n > 0 ? n : null;
-}
+// Runs in front of every /api/* request (including paths with no route).
 
-export function jsonResponse(data, status = 200) {
-  return new Response(JSON.stringify(data), {
-    status,
-    headers: { 'content-type': 'application/json' },
-  });
-}
+const SECURITY_HEADERS = {
+  'content-security-policy': "default-src 'none'; frame-ancestors 'none'",
+  'x-content-type-options': 'nosniff',
+  'referrer-policy': 'no-referrer',
+  'cross-origin-resource-policy': 'same-origin',
+  'strict-transport-security': 'max-age=31536000; includeSubDomains',
+};
 
-export function checkApiKey(env) {
-  if (!env.TMDB_API_KEY) {
-    return jsonResponse(
-      { error: 'TMDB_API_KEY not set. Add it in Cloudflare Pages dashboard → Environment variables.' },
-      500
-    );
+// Requests per client per minute. Search is the expensive, scriptable one.
+const LIMITS = { search: 30, default: 120 };
+const WINDOW_MS = 60_000;
+
+// Best-effort fallback limiter, per isolate. Many isolates serve the site, so
+// this only slows down a single noisy client; the RATE_LIMITER binding or a
+// Cloudflare WAF rate-limiting rule is the real control.
+const hits = new Map();
+
+function localLimit(key, limit) {
+  const now = Date.now();
+  const entry = hits.get(key);
+  if (!entry || now - entry.start >= WINDOW_MS) {
+    if (hits.size > 5000) hits.clear();
+    hits.set(key, { start: now, count: 1 });
+    return true;
   }
-  return null;
+  entry.count += 1;
+  return entry.count <= limit;
 }
 
-export async function tmdbFetch(path) {
-  const res = await fetch(`${TMDB_BASE}${path}`, {
-    headers: { accept: 'application/json' },
-  });
-
-  if (!res.ok) {
-    let body;
+async function allowed(env, ip, bucket) {
+  if (env.RATE_LIMITER) {
     try {
-      body = await res.json();
-    } catch {
-      body = { error: `TMDB returned status ${res.status}` };
+      const { success } = await env.RATE_LIMITER.limit({ key: `${bucket}:${ip}` });
+      return success;
+    } catch (err) {
+      console.error('RATE_LIMITER failed', err);
     }
-    return jsonResponse(body, res.status);
+  }
+  return localLimit(`${bucket}:${ip}`, LIMITS[bucket] ?? LIMITS.default);
+}
+
+function isCrossSite(request, url) {
+  // Browsers send Sec-Fetch-Site; "none" means the user opened the URL directly.
+  const site = request.headers.get('sec-fetch-site');
+  if (site && site !== 'same-origin' && site !== 'none') return true;
+  const origin = request.headers.get('origin');
+  return origin != null && origin !== url.origin;
+}
+
+function withHeaders(response, extra = {}) {
+  const res = new Response(response.body, response);
+  for (const [k, v] of Object.entries({ ...SECURITY_HEADERS, ...extra })) {
+    res.headers.set(k, v);
+  }
+  if (!res.headers.has('cache-control') || res.status !== 200) {
+    res.headers.set('cache-control', 'no-store');
+  }
+  res.headers.delete('access-control-allow-origin');
+  return res;
+}
+
+export async function onRequest(context) {
+  const { request, env } = context;
+  const url = new URL(request.url);
+
+  if (request.method !== 'GET' && request.method !== 'HEAD') {
+    return withHeaders(jsonResponse({ error: 'Method not allowed' }, 405), { allow: 'GET, HEAD' });
   }
 
-  const data = await res.json();
-  return jsonResponse(data);
+  if (isCrossSite(request, url)) {
+    return withHeaders(jsonResponse({ error: 'Forbidden' }, 403));
+  }
+
+  const ip = request.headers.get('cf-connecting-ip') || 'unknown';
+  const bucket = url.pathname === '/api/search' ? 'search' : 'default';
+  if (!(await allowed(env, ip, bucket))) {
+    return withHeaders(jsonResponse({ error: 'Too many requests' }, 429), { 'retry-after': '60' });
+  }
+
+  let response;
+  try {
+    response = await context.next();
+  } catch (err) {
+    console.error('Unhandled API error', url.pathname, err);
+    response = jsonResponse({ error: 'Internal error' }, 500);
+  }
+
+  // No function matched, so Pages fell through to the SPA's index.html.
+  const type = response.headers.get('content-type') || '';
+  if (!type.includes('application/json')) {
+    response = jsonResponse({ error: 'Not found' }, 404);
+  }
+
+  return withHeaders(response);
 }

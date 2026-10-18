@@ -1,4 +1,4 @@
-import { checkApiKey, tmdbFetch } from './_middleware.js';
+import { checkApiKey, tmdbFetch } from '../../lib/tmdb.js';
 
 export async function onRequest(context) {
   const { env } = context;
@@ -6,5 +6,5 @@ export async function onRequest(context) {
   const keyErr = checkApiKey(env);
   if (keyErr) return keyErr;
 
-  return tmdbFetch(`/trending/all/week?api_key=${env.TMDB_API_KEY}`);
+  return tmdbFetch('/trending/all/week', env, { ttl: 3600 });
 }
