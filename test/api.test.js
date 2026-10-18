@@ -5,6 +5,7 @@ import { shapes, tmdbFetch, validateInt } from '../lib/tmdb.js';
 import { onRequest as middleware } from '../functions/api/_middleware.js';
 import { onRequest as search } from '../functions/api/search.js';
 import { onRequest as season } from '../functions/api/tv/[id]/season/[num].js';
+import { onRequest as trending } from '../functions/api/trending.js';
 
 const realFetch = globalThis.fetch;
 let calls;
@@ -55,15 +56,29 @@ test('list shape keeps only movies and tv with allowlisted fields', () => {
     page: 2,
     total_pages: 9,
     results: [
-      { id: 1, media_type: 'movie', title: 'A', poster_path: '/a.jpg' },
-      { id: 3, media_type: 'tv', name: 'B', first_air_date: '2020-01-01' },
+      { id: 1, media_type: 'movie', title: 'A', poster_path: '/a.jpg', overview: 'long' },
+      { id: 3, media_type: 'tv', name: 'B', first_air_date: '2020-01-01', overview: '' },
     ],
   });
 });
 
+test('list shape fills media_type for typed lists and clips overviews', () => {
+  const out = shapes.list({ results: [{ id: 1, title: 'A', overview: 'x'.repeat(400) }] }, 'movie');
+  assert.equal(out.results[0].media_type, 'movie');
+  assert.equal(out.results[0].overview.length, 280);
+  assert.ok(out.results[0].overview.endsWith('…'));
+});
+
 test('season shape trims episodes', () => {
-  const out = shapes.season({ season_number: 1, episodes: [{ episode_number: 1, name: 'Pilot', air_date: 'x', crew: [1, 2] }] });
-  assert.deepEqual(out, { season_number: 1, episodes: [{ episode_number: 1, name: 'Pilot', air_date: 'x' }] });
+  const out = shapes.season({ season_number: 1, episodes: [{ episode_number: 1, name: 'Pilot', air_date: 'x', still_path: '/s.jpg', crew: [1, 2] }] });
+  assert.deepEqual(out, { season_number: 1, episodes: [{ episode_number: 1, name: 'Pilot', air_date: 'x', still_path: '/s.jpg', overview: '' }] });
+});
+
+test('movie and tv shapes flatten genres to names', () => {
+  const movie = shapes.movie({ id: 1, title: 'T', budget: 5, genres: [{ id: 1, name: 'Drama' }, { id: 2, name: 'Crime' }] });
+  assert.deepEqual(movie, { id: 1, title: 'T', genres: ['Drama', 'Crime'] });
+  const tv = shapes.tv({ id: 2, name: 'S', seasons: [{ season_number: 1, name: 'S1', episode_count: 3, air_date: 'x' }] });
+  assert.deepEqual(tv, { id: 2, name: 'S', genres: [], seasons: [{ season_number: 1, name: 'S1', episode_count: 3 }] });
 });
 
 test('v3 keys go in the query string, v4 tokens in a Bearer header', async () => {
@@ -95,7 +110,7 @@ test('successful responses carry cache headers when a ttl is set', async () => {
   mockTmdb(200, { id: 1, title: 'T', budget: 5 });
   const res = await tmdbFetch('/movie/1', env, { ttl: 60, shape: shapes.movie });
   assert.match(res.headers.get('cache-control'), /max-age=60/);
-  assert.deepEqual(await res.json(), { id: 1, title: 'T' });
+  assert.deepEqual(await res.json(), { id: 1, title: 'T', genres: [] });
 });
 
 // ─── routes ───
@@ -111,6 +126,16 @@ test('search validates the query and page', async () => {
   const res = await search(ctx('https://f.test/api/search?q=%20Dune%0A%20%20Part&page=2'));
   assert.equal(res.status, 200);
   assert.match(calls[0].url, /query=dune%20part&page=2&include_adult=false/);
+});
+
+test('trending accepts a media type', async () => {
+  mockTmdb(200, { results: [{ id: 1, title: 'A' }] });
+  assert.equal((await trending(ctx('https://f.test/api/trending?type=people'))).status, 400);
+  const res = await trending(ctx('https://f.test/api/trending?type=movie'));
+  assert.match(calls[0].url, /\/trending\/movie\/week/);
+  assert.equal((await res.json()).results[0].media_type, 'movie');
+  await trending(ctx('https://f.test/api/trending'));
+  assert.match(calls[1].url, /\/trending\/all\/week/);
 });
 
 test('season route rejects bad ids', async () => {
