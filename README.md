@@ -28,6 +28,7 @@ A fast, minimal web app for browsing movies and TV, built on TMDB data and runni
 | ⏯ **Continue watching** | Remembers the last movie or episode per title, on this device only. Nothing is sent to a server |
 | 🔗 **Shareable URLs** | Every screen has its own link, down to a single episode. Back and forward work, and keep your scroll position |
 | 📱 **Responsive** | Built for phones first, from 320px wide up to ultrawide screens. Supports `prefers-reduced-motion` |
+| 📲 **Installable** | Add it to your home screen from the **Install** button: a native prompt on Android and Chrome, step-by-step instructions on iPhone. Runs full screen and opens offline |
 | 🛡 **Hardened API** | Edge-cached TMDB proxy with rate limiting, input checks, strict CSP, and optional Cloudflare Turnstile |
 
 ## How it works

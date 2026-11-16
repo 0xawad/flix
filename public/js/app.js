@@ -32,6 +32,8 @@ const dom = {
   searchInput: $('#search-input'),
   searchClear: $('#search-clear'),
   verifyOverlay: $('#verify-overlay'),
+  installBtn: $('#install-btn'),
+  installSheet: $('#install-sheet'),
   verifyWidget: $('#verify-widget'),
   views: {
     home: $('#view-home'),
@@ -191,6 +193,7 @@ function onRoute() {
 }
 
 function showView(name) {
+  document.body.dataset.view = name;
   for (const [key, el] of Object.entries(dom.views)) el.classList.toggle('active', key === name);
 }
 
@@ -318,7 +321,14 @@ const historyEntry = (type, id) => readHistory().find((e) => e.media_type === ty
 
 // ─── SHARED PIECES ───
 
-function cardHTML(item, { sub, accent = false, to, removable = false, eager = false } = {}) {
+// Matches the card widths in CSS: row tracks are clamp(132px, 14vw, 186px),
+// the search grid is two columns on phones.
+const CARD_SIZES = {
+  row: '(max-width: 943px) 132px, (max-width: 1328px) 14vw, 186px',
+  grid: '(max-width: 520px) 46vw, 200px',
+};
+
+function cardHTML(item, { sub, accent = false, to, removable = false, eager = false, inGrid = false } = {}) {
   const type = item.media_type;
   const title = titleOf(item);
   const subtitle = sub ?? [yearOf(item), typeLabel(type)].filter(Boolean).join(' · ');
@@ -326,7 +336,7 @@ function cardHTML(item, { sub, accent = false, to, removable = false, eager = fa
     <div class="card">
       <a class="card-link" href="${to || href.title(type, item.id)}" data-type="${type}" data-id="${item.id}">
         <div class="card-poster">
-          ${imgHTML(item.poster_path, title, { sizes: '(max-width: 520px) 45vw, 186px', eager })}
+          ${imgHTML(item.poster_path, title, { sizes: inGrid ? CARD_SIZES.grid : CARD_SIZES.row, eager })}
           <span class="card-play">${icon('play')}</span>
         </div>
         <div class="card-title">${escape(title)}</div>
@@ -582,7 +592,7 @@ function appendResults(data) {
   const fresh = (data.results || []).filter((r) => !search.keys.has(itemKey(r)));
   fresh.forEach((r) => search.keys.add(itemKey(r)));
   const offset = grid.childElementCount;
-  grid.insertAdjacentHTML('beforeend', fresh.map((item, i) => cardHTML(item, { eager: offset + i < 6 })).join(''));
+  grid.insertAdjacentHTML('beforeend', fresh.map((item, i) => cardHTML(item, { eager: offset + i < 6, inGrid: true })).join(''));
   fadeIn(grid);
 
   search.page = data.page || 1;
@@ -694,7 +704,7 @@ function titleHTML(type, data) {
 
   return `
     <div class="title-hero">
-      ${imgHTML(data.backdrop_path, '', { kind: 'backdrop', sizes: '100vw', eager: true, cls: 'hero-bg' })}
+      ${data.backdrop_path ? imgHTML(data.backdrop_path, '', { kind: 'backdrop', sizes: '100vw', eager: true, cls: 'hero-bg' }) : ''}
       <button class="back-btn title-back" type="button" data-action="back">${icon('back')}Back</button>
       <div class="title-layout">
         <div class="title-poster">${imgHTML(data.poster_path, name, { sizes: '240px', eager: true })}</div>
@@ -923,6 +933,52 @@ function stopPlayer() {
   setPlayerSrc(null);
 }
 
+// ─── INSTALL ───
+
+// Chromium (Android, desktop) fires `beforeinstallprompt` and lets the button
+// open the native install dialog. iOS has no install API, so the button opens
+// a sheet with the Share → Add to Home Screen steps instead.
+let installPrompt = null;
+const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent)
+  || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+const isInstalled = () => matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
+
+function updateInstallButton() {
+  dom.installBtn.classList.toggle('hidden', isInstalled() || !(installPrompt || isIOS));
+}
+
+window.addEventListener('beforeinstallprompt', (e) => {
+  e.preventDefault();
+  installPrompt = e;
+  updateInstallButton();
+});
+
+window.addEventListener('appinstalled', () => {
+  installPrompt = null;
+  updateInstallButton();
+});
+
+dom.installBtn.addEventListener('click', async () => {
+  if (installPrompt) {
+    const prompt = installPrompt;
+    installPrompt = null;
+    prompt.prompt();
+    await prompt.userChoice.catch(() => {});
+    updateInstallButton();
+  } else if (isIOS && dom.installSheet.showModal) {
+    dom.installSheet.showModal();
+  }
+});
+
+// Tap outside the sheet to close it.
+dom.installSheet.addEventListener('click', (e) => {
+  if (e.target === dom.installSheet) dom.installSheet.close();
+});
+
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => navigator.serviceWorker.register('/sw.js').catch(() => {}));
+}
+
 // ─── EVENTS ───
 
 dom.searchForm.addEventListener('submit', (e) => {
@@ -1007,7 +1063,7 @@ window.addEventListener('scroll', onScroll, { passive: true });
 
 document.addEventListener('keydown', (e) => {
   const typing = e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement;
-  if (e.ctrlKey || e.metaKey || e.altKey) return;
+  if (e.ctrlKey || e.metaKey || e.altKey || dom.installSheet.open) return;
 
   if (e.key === '/' && !typing) {
     e.preventDefault();
@@ -1028,4 +1084,5 @@ window.addEventListener('hashchange', onRoute);
 
 if ('scrollRestoration' in history) history.scrollRestoration = 'manual';
 onScroll();
+updateInstallButton();
 onRoute();

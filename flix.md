@@ -17,6 +17,9 @@ browser ──► Pages (public/)          static HTML/CSS/JS
 | `public/js/app.js` | All client logic: router, views, player, Continue watching |
 | `public/css/style.css` | Styles |
 | `public/_headers` | Security headers and CSP for static assets |
+| `public/manifest.webmanifest` | Web app manifest (name, colors, icons) so phones can install Flix |
+| `public/sw.js` | Service worker: offline app shell; never touches `/api/*` or third-party requests |
+| `public/icons/` | App icons. `icon.svg` is the source; `node scripts/build-icons.js` renders the PNGs |
 | `functions/api/_middleware.js` | Runs before every `/api/*` request |
 | `functions/api/**` | One file per route (file-based routing) |
 | `lib/tmdb.js` | TMDB auth, fetch, error mapping, response shaping, edge cache |
@@ -75,6 +78,11 @@ API responses are memoized for the page's lifetime (`api()`), and hovering a car
 ### Player
 - Each source in `SOURCES` builds a movie or TV embed URL from TMDB ids.
 - Each load inserts a **fresh iframe** (`setPlayerSrc`), because changing an existing iframe's `src` adds a browser-history entry and breaks Back. Leaving the player removes the iframe.
+
+### Install as an app
+The topbar's **Install** button only shows when installing is possible and Flix isn't already running as an installed app. On Chromium browsers (Android and desktop) it opens the native install dialog from `beforeinstallprompt`. iOS has no install API, so on iPhone and iPad it opens a sheet with the Share → Add to Home Screen steps. Once installed, Flix runs full screen, so the layout pads for the notch and home indicator with `env(safe-area-inset-*)`.
+
+The service worker loads pages network-first, falling back to the cached shell when offline. It serves the `?v=`-versioned CSS and JS cache-first and drops old versions, and refreshes other same-origin files in the background. `/sw.js` is served with `Cache-Control: no-cache` so updates reach users right away.
 
 ### Continue watching
 Stored in `localStorage` under `flix:history`. It keeps up to 20 entries, one per movie or series, and a series remembers its latest episode. It's per browser, and nothing is sent to the server.
